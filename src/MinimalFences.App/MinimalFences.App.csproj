@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>MinimalFences</AssemblyName>
+    <RootNamespace>MinimalFences</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/MinimalFences.ico</ApplicationIcon>
+    <Version>1.0.2</Version>
+    <Product>Minimal Fences</Product>
+    <Description>A lightweight, local Windows desktop organizer.</Description>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishSingleFile>false</PublishSingleFile>
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../MinimalFences.Core/MinimalFences.Core.csproj" />
+    <Resource Include="Assets/MinimalFences.ico" />
+    <Resource Include="Assets/Fonts/*.ttf" />
+  </ItemGroup>
+</Project>

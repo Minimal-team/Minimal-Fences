@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MinimalFences.Core/MinimalFences.Core.csproj" />
+    <Project Path="src/MinimalFences.App/MinimalFences.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MinimalFences.Core.Tests/MinimalFences.Core.Tests.csproj" />
+  </Folder>
+</Solution>

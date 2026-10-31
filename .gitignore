@@ -1,0 +1,18 @@
+# Build results
+bin/
+obj/
+artifacts/
+TestResults/
+
+# Visual Studio / Rider / VSCode
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Windows
+Thumbs.db
+Desktop.ini

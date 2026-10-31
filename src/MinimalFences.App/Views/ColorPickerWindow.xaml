@@ -1,0 +1,185 @@
+﻿<Window x:Class="MinimalFences.Views.ColorPickerWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:services="clr-namespace:MinimalFences.Services"
+ WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+ WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+ Width="440" MaxHeight="680" SizeToContent="Height" ShowInTaskbar="False">
+ <Window.Resources>
+  <Style x:Key="HeaderCloseButton" TargetType="Button">
+   <Setter Property="Background" Value="Transparent" />
+   <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+   <Setter Property="Width" Value="28" />
+   <Setter Property="Height" Value="28" />
+   <Setter Property="Focusable" Value="False" />
+   <Setter Property="Cursor" Value="Hand" />
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Button">
+      <Border x:Name="Brd" Background="{TemplateBinding Background}" CornerRadius="6">
+       <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter TargetName="Brd" Property="Background" Value="#30FF5376" />
+        <Setter Property="Foreground" Value="#FF5376" />
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+  <Style x:Key="ColorSwatchButton" TargetType="Button">
+   <Setter Property="Width" Value="30" />
+   <Setter Property="Height" Value="30" />
+   <Setter Property="Margin" Value="3" />
+   <Setter Property="Cursor" Value="Hand" />
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="Button">
+      <Border x:Name="Dot" Background="{TemplateBinding Background}" CornerRadius="8"
+        BorderBrush="#35FFFFFF" BorderThickness="1.5">
+       <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource Accent}" />
+        <Setter TargetName="Dot" Property="BorderThickness" Value="2" />
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+ </Window.Resources>
+ <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+   BorderThickness="1.5" CornerRadius="16" Margin="10"
+   MouseLeftButtonDown="WindowMouseDown">
+  <Border.Effect>
+   <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.65" Color="#000000" />
+  </Border.Effect>
+  <Grid Margin="18">
+   <Grid.RowDefinitions>
+    <RowDefinition Height="Auto" />
+    <RowDefinition Height="*" />
+    <RowDefinition Height="Auto" />
+   </Grid.RowDefinitions>
+   <DockPanel Grid.Row="0" Margin="0,0,0,12">
+    <Button DockPanel.Dock="Right" Style="{StaticResource HeaderCloseButton}" Click="CancelClick">
+     <Path Data="M 0,0 L 8,8 M 0,8 L 8,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" SnapsToDevicePixels="True" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Button>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+     <Ellipse Width="8" Height="8" Fill="{DynamicResource Accent}" Margin="0,0,8,0" VerticalAlignment="Center" />
+     <TextBlock Text="{Binding ColorPickerTitle, Source={x:Static services:AppLocalization.Current}}"
+       FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Foreground}" VerticalAlignment="Center" />
+    </StackPanel>
+   </DockPanel>
+   <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+     MaxHeight="510" Padding="0,0,4,0">
+    <StackPanel>
+     <TextBlock Text="{Binding ColorWheel, Source={x:Static services:AppLocalization.Current}}"
+       FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="0,0,0,6" />
+     <Canvas x:Name="WheelCanvas" Width="180" Height="180" HorizontalAlignment="Center" Margin="0,0,0,8"
+       Background="Transparent"
+       PreviewMouseLeftButtonDown="WheelMouseDown" PreviewMouseMove="WheelMouseMove" PreviewMouseLeftButtonUp="WheelMouseUp"
+       Cursor="Cross">
+      <Image x:Name="WheelImage" Width="180" Height="180" IsHitTestVisible="False" RenderOptions.BitmapScalingMode="HighQuality" />
+      <Ellipse x:Name="WheelReticle" Width="16" Height="16" Stroke="White" StrokeThickness="2.5" IsHitTestVisible="False">
+       <Ellipse.Effect>
+        <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="Black" />
+       </Ellipse.Effect>
+      </Ellipse>
+     </Canvas>
+     <DockPanel Margin="10,0,10,2">
+      <TextBlock Text="{Binding ColorBrightness, Source={x:Static services:AppLocalization.Current}}"
+        FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" />
+      <TextBlock x:Name="BrightnessValueText" Text="100%" HorizontalAlignment="Right" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource Foreground}" />
+     </DockPanel>
+     <Slider x:Name="BrightnessSlider" Minimum="0" Maximum="1" Value="1" Margin="10,0,10,12" ValueChanged="BrightnessSliderChanged" />
+     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Border}"
+       BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,0,0,12">
+      <Grid>
+       <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+       </Grid.ColumnDefinitions>
+       <Border x:Name="PreviewBox" Width="64" Height="64" CornerRadius="10"
+         BorderBrush="#40FFFFFF" BorderThickness="2" Margin="0,0,14,0" VerticalAlignment="Center">
+        <Border.Effect>
+         <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.4" Color="#000000" />
+        </Border.Effect>
+       </Border>
+       <StackPanel Grid.Column="1" VerticalAlignment="Center">
+        <TextBlock Text="{Binding ColorHex, Source={x:Static services:AppLocalization.Current}}"
+          FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="0,0,0,4" />
+        <Border Background="{DynamicResource PanelInput}" BorderBrush="{DynamicResource Border}"
+          BorderThickness="1" CornerRadius="8" Padding="10,6">
+         <TextBox x:Name="HexInput" Background="Transparent" Foreground="{DynamicResource Foreground}"
+           BorderThickness="0" FontFamily="Consolas, Segoe UI" FontSize="16" FontWeight="Bold"
+           TextChanged="HexInputChanged" MaxLength="7" VerticalAlignment="Center" />
+        </Border>
+       </StackPanel>
+      </Grid>
+     </Border>
+     <StackPanel Margin="0,0,0,12">
+      <DockPanel Margin="0,0,0,2">
+       <TextBlock Text="{Binding ColorRed, Source={x:Static services:AppLocalization.Current}}"
+         FontSize="11" FontWeight="SemiBold" Foreground="#FF5376" />
+       <TextBlock x:Name="RedValueText" Text="0" HorizontalAlignment="Right" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource Foreground}" />
+      </DockPanel>
+      <Slider x:Name="RedSlider" Minimum="0" Maximum="255" ValueChanged="RgbSliderChanged" Margin="0,0,0,8" />
+      <DockPanel Margin="0,0,0,2">
+       <TextBlock Text="{Binding ColorGreen, Source={x:Static services:AppLocalization.Current}}"
+         FontSize="11" FontWeight="SemiBold" Foreground="#00E5D4" />
+       <TextBlock x:Name="GreenValueText" Text="0" HorizontalAlignment="Right" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource Foreground}" />
+      </DockPanel>
+      <Slider x:Name="GreenSlider" Minimum="0" Maximum="255" ValueChanged="RgbSliderChanged" Margin="0,0,0,8" />
+      <DockPanel Margin="0,0,0,2">
+       <TextBlock Text="{Binding ColorBlue, Source={x:Static services:AppLocalization.Current}}"
+         FontSize="11" FontWeight="SemiBold" Foreground="#3B82F6" />
+       <TextBlock x:Name="BlueValueText" Text="0" HorizontalAlignment="Right" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource Foreground}" />
+      </DockPanel>
+      <Slider x:Name="BlueSlider" Minimum="0" Maximum="255" ValueChanged="RgbSliderChanged" Margin="0,0,0,2" />
+     </StackPanel>
+     <StackPanel Margin="0,0,0,8">
+      <TextBlock Text="{Binding ColorPalettePresets, Source={x:Static services:AppLocalization.Current}}"
+        FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource Muted}" Margin="0,0,0,6" />
+      <WrapPanel x:Name="PresetSwatchesPanel">
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#121418" Tag="#121418" Click="PresetClick" ToolTip="#121418" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#1A1D24" Tag="#1A1D24" Click="PresetClick" ToolTip="#1A1D24" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#1E222B" Tag="#1E222B" Click="PresetClick" ToolTip="#1E222B" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#252A36" Tag="#252A36" Click="PresetClick" ToolTip="#252A36" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#373E4D" Tag="#373E4D" Click="PresetClick" ToolTip="#373E4D" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#4A5568" Tag="#4A5568" Click="PresetClick" ToolTip="#4A5568" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#718096" Tag="#718096" Click="PresetClick" ToolTip="#718096" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#C6D0E2" Tag="#C6D0E2" Click="PresetClick" ToolTip="#C6D0E2" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#00E5D4" Tag="#00E5D4" Click="PresetClick" ToolTip="#00E5D4" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#00B4D8" Tag="#00B4D8" Click="PresetClick" ToolTip="#00B4D8" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#3B82F6" Tag="#3B82F6" Click="PresetClick" ToolTip="#3B82F6" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#8B5CF6" Tag="#8B5CF6" Click="PresetClick" ToolTip="#8B5CF6" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#EC4899" Tag="#EC4899" Click="PresetClick" ToolTip="#EC4899" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#EF4444" Tag="#EF4444" Click="PresetClick" ToolTip="#EF4444" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#F59E0B" Tag="#F59E0B" Click="PresetClick" ToolTip="#F59E0B" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#10B981" Tag="#10B981" Click="PresetClick" ToolTip="#10B981" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#2A2D37" Tag="#2A2D37" Click="PresetClick" ToolTip="#2A2D37" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#232D3F" Tag="#232D3F" Click="PresetClick" ToolTip="#232D3F" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#1C2B36" Tag="#1C2B36" Click="PresetClick" ToolTip="#1C2B36" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#1B3B36" Tag="#1B3B36" Click="PresetClick" ToolTip="#1B3B36" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#362B3D" Tag="#362B3D" Click="PresetClick" ToolTip="#362B3D" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#3D2833" Tag="#3D2833" Click="PresetClick" ToolTip="#3D2833" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#3A3423" Tag="#3A3423" Click="PresetClick" ToolTip="#3A3423" />
+       <Button Style="{StaticResource ColorSwatchButton}" Background="#2E3A30" Tag="#2E3A30" Click="PresetClick" ToolTip="#2E3A30" />
+      </WrapPanel>
+     </StackPanel>
+    </StackPanel>
+   </ScrollViewer>
+   <DockPanel Grid.Row="2" Margin="0,10,0,0" LastChildFill="False">
+    <Button Content="{Binding ColorCancel, Source={x:Static services:AppLocalization.Current}}"
+      DockPanel.Dock="Right" Padding="18,8" Margin="0" Click="CancelClick" />
+    <Button Content="{Binding ColorApply, Source={x:Static services:AppLocalization.Current}}"
+      DockPanel.Dock="Right" Style="{StaticResource AccentButton}" Padding="20,8" Margin="0,0,10,0"
+      Click="ApplyClick" />
+   </DockPanel>
+  </Grid>
+ </Border>
+</Window>

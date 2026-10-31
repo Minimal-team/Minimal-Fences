@@ -1,0 +1,296 @@
+﻿<Window x:Class="MinimalFences.Views.SettingsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:local="clr-namespace:MinimalFences.Views"
+ xmlns:services="clr-namespace:MinimalFences.Services"
+ Title="Minimal Fences" Width="940" Height="780" MinWidth="780" MinHeight="600" WindowStartupLocation="CenterScreen"
+ Background="{DynamicResource Surface}" Foreground="{DynamicResource Foreground}"
+ WindowStyle="None" ResizeMode="CanResize">
+ <WindowChrome.WindowChrome>
+  <WindowChrome CaptionHeight="64" CornerRadius="0" GlassFrameThickness="0" ResizeBorderThickness="8" UseAeroCaptionButtons="False" />
+ </WindowChrome.WindowChrome>
+ <Window.Resources>
+  <Style TargetType="TabControl">
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="TabControl">
+      <Grid>
+       <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+       </Grid.RowDefinitions>
+       <Border Background="{DynamicResource PanelInput}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
+         CornerRadius="18" Padding="4" HorizontalAlignment="Left" Margin="0,0,0,16">
+        <TabPanel IsItemsHost="True" />
+       </Border>
+       <ContentPresenter Grid.Row="1" ContentSource="SelectedContent" />
+      </Grid>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+
+  <Style TargetType="TabItem">
+   <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+   <Setter Property="Padding" Value="18,8" />
+   <Setter Property="Cursor" Value="Hand" />
+   <Setter Property="FontWeight" Value="SemiBold" />
+   <Setter Property="FontSize" Value="13" />
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="TabItem">
+      <Border x:Name="TabBorder" Background="Transparent" CornerRadius="14" Padding="{TemplateBinding Padding}">
+       <ContentPresenter ContentSource="Header" VerticalAlignment="Center" HorizontalAlignment="Center" />
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsSelected" Value="True">
+        <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AccentGradient}" />
+        <Setter Property="Foreground" Value="#09101F" />
+        <Setter Property="FontWeight" Value="Bold" />
+       </Trigger>
+       <MultiTrigger>
+        <MultiTrigger.Conditions>
+         <Condition Property="IsSelected" Value="False" />
+         <Condition Property="IsMouseOver" Value="True" />
+        </MultiTrigger.Conditions>
+        <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource ButtonBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+       </MultiTrigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+
+  <Style TargetType="ListBoxItem">
+   <Setter Property="Padding" Value="12,10" />
+   <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+   <Setter Property="Cursor" Value="Hand" />
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="ListBoxItem">
+      <Border x:Name="Row" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}" Margin="0,2">
+       <DockPanel LastChildFill="True">
+        <Border x:Name="Indicator" Width="4" Height="14" CornerRadius="2"
+          Background="{DynamicResource Accent}" Margin="0,0,10,0" Visibility="Collapsed" />
+        <ContentPresenter VerticalAlignment="Center" />
+       </DockPanel>
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsSelected" Value="True">
+        <Setter TargetName="Row" Property="Background" Value="{DynamicResource ButtonBackground}" />
+        <Setter TargetName="Indicator" Property="Visibility" Value="Visible" />
+        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+       </Trigger>
+       <MultiTrigger>
+        <MultiTrigger.Conditions>
+         <Condition Property="IsSelected" Value="False" />
+         <Condition Property="IsMouseOver" Value="True" />
+        </MultiTrigger.Conditions>
+        <Setter TargetName="Row" Property="Background" Value="{DynamicResource PanelInput}" />
+        <Setter Property="Foreground" Value="{DynamicResource Foreground}" />
+       </MultiTrigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+ </Window.Resources>
+
+ <Grid Margin="28">
+  <Grid.RowDefinitions>
+   <RowDefinition Height="Auto" />
+   <RowDefinition Height="20" />
+   <RowDefinition Height="*" />
+   <RowDefinition Height="Auto" />
+  </Grid.RowDefinitions>
+
+  <DockPanel Grid.Row="0">
+   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,-14,-14,0" WindowChrome.IsHitTestVisibleInChrome="True">
+     <Button Style="{StaticResource WindowControlButton}" Click="MinimizeWindow"
+       ToolTip="{Binding MinimizeTooltip, Source={x:Static services:AppLocalization.Current}}" AutomationProperties.Name="Minimize">
+      <Rectangle Width="10" Height="1.2" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" SnapsToDevicePixels="True" />
+     </Button>
+     <Button x:Name="MaximizeButton" Style="{StaticResource WindowControlButton}" Click="MaximizeWindow"
+       ToolTip="{Binding MaximizeTooltip, Source={x:Static services:AppLocalization.Current}}" AutomationProperties.Name="Maximize">
+      <Grid SnapsToDevicePixels="True">
+       <Rectangle x:Name="MaxIcon" Width="10" Height="10" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" SnapsToDevicePixels="True" />
+       <Path x:Name="RestoreIcon" Visibility="Collapsed" Data="M 3,0 H 10 V 7 H 7 M 0,3 H 7 V 10 H 0 Z" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" SnapsToDevicePixels="True" />
+      </Grid>
+     </Button>
+     <Button Style="{StaticResource WindowCloseButton}" Click="CloseWindow"
+       ToolTip="{Binding CloseTooltip, Source={x:Static services:AppLocalization.Current}}" AutomationProperties.Name="Close">
+      <Path Data="M 0,0 L 9,9 M 0,9 L 9,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" SnapsToDevicePixels="True" />
+     </Button>
+    </StackPanel>
+
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+    <Ellipse Width="10" Height="10" Fill="{DynamicResource Accent}" Margin="0,0,10,0" VerticalAlignment="Center" />
+    <TextBlock Text="{Binding AppTitle, Source={x:Static services:AppLocalization.Current}}"
+      FontSize="26" FontWeight="Bold" Foreground="{DynamicResource Foreground}" />
+   </StackPanel>
+  </DockPanel>
+
+  <Grid Grid.Row="2">
+   <Grid.ColumnDefinitions>
+    <ColumnDefinition Width="220" />
+    <ColumnDefinition Width="22" />
+    <ColumnDefinition Width="*" />
+   </Grid.ColumnDefinitions>
+
+   <Border Grid.Column="0" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Border}"
+     BorderThickness="1.5" CornerRadius="16" Padding="14">
+    <DockPanel LastChildFill="True">
+     <TextBlock DockPanel.Dock="Top" Text="{Binding YourGroups, Source={x:Static services:AppLocalization.Current}}"
+       FontSize="11" FontWeight="Bold" Foreground="{DynamicResource Muted}" Margin="8,6,0,14" />
+     <StackPanel DockPanel.Dock="Bottom" Margin="0,14,0,0">
+      <Button Style="{StaticResource AccentButton}"
+        Content="{Binding CreateGroup, Source={x:Static services:AppLocalization.Current}}"
+        Click="CreateGroup" FontSize="12" Padding="10,8" Margin="0,0,0,8"
+        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+      <Button Content="{Binding ShowHideAll, Source={x:Static services:AppLocalization.Current}}"
+        Click="ToggleGroups" FontSize="12" Padding="10,8"
+        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+     </StackPanel>
+     <ListBox x:Name="GroupsList" ItemsSource="{Binding Settings.Groups}" DisplayMemberPath="Name"
+       Background="Transparent" BorderThickness="0" Foreground="{DynamicResource ForegroundSecondary}"
+       SelectionChanged="GroupSelected" AutomationProperties.Name="Groups" />
+    </DockPanel>
+   </Border>
+
+   <TabControl x:Name="Tabs" Grid.Column="2" Background="Transparent" BorderThickness="0">
+    <TabItem Header="{Binding TabSelectedGroup, Source={x:Static services:AppLocalization.Current}}">
+     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Border}"
+       BorderThickness="1.5" CornerRadius="16" Padding="22">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+       <StackPanel>
+        <TextBlock x:Name="NoSelection" Text="{Binding NoGroupSelected, Source={x:Static services:AppLocalization.Current}}"
+          Margin="8,24" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" />
+        <StackPanel x:Name="GroupPanel" Visibility="Collapsed">
+         <Label Content="{Binding GroupNameLabel, Source={x:Static services:AppLocalization.Current}}" />
+         <TextBox x:Name="GroupName" Text="{Binding Name}" AutomationProperties.Name="Group name" Margin="0,0,0,6" />
+         <TextBlock Text="{Binding AutoSaveHint, Source={x:Static services:AppLocalization.Current}}"
+           FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,4,0,16" />
+         
+         <local:AppearanceEditor DataContext="{Binding Appearance}" />
+         
+         <Separator Margin="0,18" Background="{DynamicResource Border}" />
+         <TextBlock Text="{Binding Items.Count, StringFormat={}{0} items in this group}"
+           Foreground="{DynamicResource Muted}" Margin="0,0,0,14" FontWeight="SemiBold" />
+         <WrapPanel Margin="0,0,0,6">
+          <Button Content="{Binding AddFiles, Source={x:Static services:AppLocalization.Current}}" Click="AddFiles" Margin="0,0,10,10" />
+          <Button Content="{Binding AddFolder, Source={x:Static services:AppLocalization.Current}}" Click="AddFolder" Margin="0,0,10,10" />
+          <Button Style="{StaticResource DangerButton}" Content="{Binding DeleteGroup, Source={x:Static services:AppLocalization.Current}}"
+            Click="DeleteGroup" Margin="0,0,0,10" />
+         </WrapPanel>
+         <TextBlock Text="{Binding ReorderHint, Source={x:Static services:AppLocalization.Current}}"
+           FontSize="12" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0" />
+        </StackPanel>
+       </StackPanel>
+      </ScrollViewer>
+     </Border>
+    </TabItem>
+
+    <TabItem Header="{Binding TabGeneral, Source={x:Static services:AppLocalization.Current}}">
+     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Border}"
+       BorderThickness="1.5" CornerRadius="16" Padding="22">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+       <StackPanel>
+        <TextBlock Text="{Binding MakeDesktopYours, Source={x:Static services:AppLocalization.Current}}"
+          FontSize="20" FontWeight="Bold" Foreground="{DynamicResource Foreground}" Margin="0,0,0,16" />
+        
+        <Grid Margin="0,0,0,16">
+         <Grid.ColumnDefinitions>
+          <ColumnDefinition />
+          <ColumnDefinition Width="20" />
+          <ColumnDefinition />
+         </Grid.ColumnDefinitions>
+         <StackPanel Grid.Column="0">
+          <Label Content="{Binding LanguageLabel, Source={x:Static services:AppLocalization.Current}}" />
+          <ComboBox SelectedValuePath="Tag" SelectedValue="{Binding Settings.Language, Mode=TwoWay}">
+           <ComboBoxItem Content="{Binding LanguageRussian, Source={x:Static services:AppLocalization.Current}}" Tag="ru" />
+           <ComboBoxItem Content="{Binding LanguageEnglish, Source={x:Static services:AppLocalization.Current}}" Tag="en" />
+          </ComboBox>
+         </StackPanel>
+         <StackPanel Grid.Column="2">
+          <Label Content="{Binding ThemeLabel, Source={x:Static services:AppLocalization.Current}}" />
+          <ComboBox SelectedValuePath="Tag" SelectedValue="{Binding Settings.Theme, Mode=TwoWay}">
+           <ComboBoxItem Content="{Binding ThemeDark, Source={x:Static services:AppLocalization.Current}}" Tag="dark" />
+           <ComboBoxItem Content="{Binding ThemeLight, Source={x:Static services:AppLocalization.Current}}" Tag="light" />
+          </ComboBox>
+         </StackPanel>
+        </Grid>
+
+        <Border Background="{DynamicResource PanelInput}" BorderBrush="{DynamicResource Border}"
+          BorderThickness="1" CornerRadius="12" Padding="16,8" Margin="0,0,0,18">
+         <StackPanel>
+          <CheckBox Content="{Binding StartWithWindows, Source={x:Static services:AppLocalization.Current}}"
+            IsChecked="{Binding Settings.StartWithWindows}" />
+          <Separator Background="{DynamicResource Border}" Margin="0,4" />
+          <CheckBox Content="{Binding DesktopDoubleClick, Source={x:Static services:AppLocalization.Current}}"
+            IsChecked="{Binding Settings.DesktopDoubleClick}" />
+          <TextBlock Text="{Binding DesktopDoubleClickHint, Source={x:Static services:AppLocalization.Current}}"
+            TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12" Margin="54,-4,0,10" />
+          <Separator Background="{DynamicResource Border}" Margin="0,4" />
+          <CheckBox Content="{Binding EnableHotkey, Source={x:Static services:AppLocalization.Current}}"
+            IsChecked="{Binding Settings.HotkeyEnabled}" />
+          <StackPanel Margin="54,0,0,8">
+           <Label Content="{Binding HotkeyLabel, Source={x:Static services:AppLocalization.Current}}" Padding="0,2,0,4" />
+           <DockPanel LastChildFill="False">
+            <TextBox x:Name="HotkeyInput" Text="{Binding Settings.Hotkey, Mode=OneWay}"
+              IsEnabled="{Binding Settings.HotkeyEnabled}"
+              IsReadOnly="True" Cursor="Hand"
+              PreviewKeyDown="HotkeyPreviewKeyDown" GotFocus="HotkeyGotFocus" LostFocus="HotkeyLostFocus"
+              AutomationProperties.Name="Show or hide shortcut" Width="260" HorizontalAlignment="Left" />
+            <Button ToolTip="Ctrl+Alt+F" Margin="8,0,0,0" Width="26" Height="26" Padding="0"
+              IsEnabled="{Binding Settings.HotkeyEnabled}"
+              Click="ResetHotkeyClick"><Path Data="M 0,0 L 7,7 M 0,7 L 7,0" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" SnapsToDevicePixels="True" HorizontalAlignment="Center" VerticalAlignment="Center" /></Button>
+           </DockPanel>
+           <TextBlock Text="{Binding HotkeyHint, Source={x:Static services:AppLocalization.Current}}"
+             Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,6,0,0" />
+          </StackPanel>
+         </StackPanel>
+        </Border>
+
+        <TextBlock Text="{Binding DesktopRecovery, Source={x:Static services:AppLocalization.Current}}"
+          FontSize="16" FontWeight="Bold" Foreground="{DynamicResource Foreground}" Margin="0,6,0,10" />
+        <TextBlock Text="{Binding RecoveryHint, Source={x:Static services:AppLocalization.Current}}"
+          TextWrapping="Wrap" Foreground="{DynamicResource Muted}" FontSize="12" Margin="0,0,0,14" />
+        <WrapPanel Margin="0,0,0,10">
+         <Button Content="{Binding RestoreGroups, Source={x:Static services:AppLocalization.Current}}"
+           Click="RestoreGroups" Margin="0,0,10,10" />
+         <Button Content="{Binding ReconnectDesktop, Source={x:Static services:AppLocalization.Current}}"
+           Click="ReconnectDesktop" Margin="0,0,10,10" />
+         <Button Content="{Binding OpenDataFolder, Source={x:Static services:AppLocalization.Current}}"
+           Click="OpenDataFolder" Margin="0,0,0,10" />
+        </WrapPanel>
+       </StackPanel>
+      </ScrollViewer>
+     </Border>
+    </TabItem>
+
+    <TabItem Header="{Binding TabDefaults, Source={x:Static services:AppLocalization.Current}}">
+     <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource Border}"
+       BorderThickness="1.5" CornerRadius="16" Padding="22">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+       <StackPanel>
+        <TextBlock Text="{Binding StartWithStyle, Source={x:Static services:AppLocalization.Current}}"
+          FontSize="20" FontWeight="Bold" Foreground="{DynamicResource Foreground}" Margin="0,0,0,6" />
+        <TextBlock Text="{Binding DefaultsHint, Source={x:Static services:AppLocalization.Current}}"
+          TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,0,0,18" />
+        <local:AppearanceEditor DataContext="{Binding Settings.Defaults}" />
+       </StackPanel>
+      </ScrollViewer>
+     </Border>
+    </TabItem>
+   </TabControl>
+  </Grid>
+
+  <Border Grid.Row="3" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0"
+    Margin="0,20,0,0" Padding="0,12,0,0">
+   <TextBlock x:Name="StatusText" Text="{Binding StatusHint, Source={x:Static services:AppLocalization.Current}}"
+     Foreground="{DynamicResource Muted}" FontSize="12" TextWrapping="Wrap" />
+  </Border>
+ </Grid>
+</Window>

@@ -1,0 +1,220 @@
+<UserControl x:Class="MinimalFences.Views.AppearanceEditor"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:services="clr-namespace:MinimalFences.Services">
+ <UserControl.Resources>
+  <services:FontNameToFontFamilyConverter x:Key="FontConverter" />
+  <services:BadgeStyleToPathConverter x:Key="BadgePathConverter" />
+  <services:BadgeStyleToNameConverter x:Key="BadgeNameConverter" />
+ </UserControl.Resources>
+ <StackPanel>
+  <Label Content="{Binding BackgroundColor, Source={x:Static services:AppLocalization.Current}}" />
+  <WrapPanel Margin="0,4,0,8">
+   <WrapPanel.Resources>
+    <Style TargetType="Button">
+     <Setter Property="Width" Value="28" />
+     <Setter Property="Height" Value="28" />
+     <Setter Property="Margin" Value="0,0,8,6" />
+     <Setter Property="Cursor" Value="Hand" />
+     <Setter Property="Template">
+      <Setter.Value>
+       <ControlTemplate TargetType="Button">
+        <Border x:Name="Dot" Background="{TemplateBinding Background}" CornerRadius="14"
+          BorderBrush="#40FFFFFF" BorderThickness="1.5">
+         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <ControlTemplate.Triggers>
+         <Trigger Property="IsMouseOver" Value="True">
+          <Setter TargetName="Dot" Property="BorderBrush" Value="{DynamicResource Accent}" />
+          <Setter TargetName="Dot" Property="BorderThickness" Value="2" />
+         </Trigger>
+        </ControlTemplate.Triggers>
+       </ControlTemplate>
+      </Setter.Value>
+     </Setter>
+    </Style>
+   </WrapPanel.Resources>
+   <Button Background="#1E222B" Tag="#1E222B" ToolTip="Dark Graphite" Click="PresetColor" AutomationProperties.Name="Dark Graphite" />
+   <Button Background="#252A36" Tag="#252A36" ToolTip="Slate Gray" Click="PresetColor" AutomationProperties.Name="Slate Gray" />
+   <Button Background="#373E4D" Tag="#373E4D" ToolTip="Medium Gray" Click="PresetColor" AutomationProperties.Name="Medium Gray" />
+   <Button Background="#141720" Tag="#141720" ToolTip="Midnight" Click="PresetColor" AutomationProperties.Name="Midnight" />
+   <Button Background="#00E5D4" Tag="#00E5D4" ToolTip="Neon Cyan" Click="PresetColor" AutomationProperties.Name="Neon Cyan" />
+   <Button Background="#7B5CFA" Tag="#7B5CFA" ToolTip="Neon Purple" Click="PresetColor" AutomationProperties.Name="Neon Purple" />
+   <Button Background="#FF5376" Tag="#FF5376" ToolTip="Coral Pink" Click="PresetColor" AutomationProperties.Name="Coral Pink" />
+   <Button Background="#00B4D8" Tag="#00B4D8" ToolTip="Ocean Blue" Click="PresetColor" AutomationProperties.Name="Ocean Blue" />
+   <Button Background="#2E7D32" Tag="#2E7D32" ToolTip="Emerald" Click="PresetColor" AutomationProperties.Name="Emerald" />
+   <Button Background="#C6D0E2" Tag="#C6D0E2" ToolTip="Silver gray" Click="PresetColor" AutomationProperties.Name="Silver gray" />
+   <Button Width="Auto" Height="28" Content="{Binding DarkGrayBackground, Source={x:Static services:AppLocalization.Current}}"
+     Tag="#1E222B" Click="PresetColor" Padding="10,4" Margin="4,0,0,6">
+    <Button.Template>
+     <ControlTemplate TargetType="Button">
+      <Border x:Name="Brd" Background="{DynamicResource ButtonBackground}" BorderBrush="{DynamicResource Border}"
+        BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}">
+       <TextBlock Text="{TemplateBinding Content}" FontSize="12" Foreground="{DynamicResource ForegroundSecondary}"
+         VerticalAlignment="Center" HorizontalAlignment="Center" />
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter TargetName="Brd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Button.Template>
+   </Button>
+   <Button Width="Auto" Height="28" Content="{Binding CustomColor, Source={x:Static services:AppLocalization.Current}}"
+     Click="CustomColor" Padding="12,4" Margin="4,0,0,6">
+    <Button.Template>
+     <ControlTemplate TargetType="Button">
+      <Border x:Name="Brd" Background="{DynamicResource ButtonBackground}" BorderBrush="{DynamicResource Border}"
+        BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}">
+       <TextBlock Text="{TemplateBinding Content}" FontSize="12" Foreground="{DynamicResource ForegroundSecondary}"
+         VerticalAlignment="Center" HorizontalAlignment="Center" />
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True">
+        <Setter TargetName="Brd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+       </Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Button.Template>
+   </Button>
+  </WrapPanel>
+
+  <DockPanel Margin="0,10,0,4">
+   <TextBlock Text="{Binding BackgroundOpacity, Source={x:Static services:AppLocalization.Current}}" Foreground="{DynamicResource Muted}" FontSize="12" FontWeight="SemiBold" />
+   <TextBlock Text="{Binding Opacity, StringFormat={}{0:P0}}" HorizontalAlignment="Right" Foreground="{DynamicResource Accent}" FontWeight="Bold" />
+  </DockPanel>
+  <Slider Minimum="0" Maximum="1" SmallChange="0.01" LargeChange="0.05" IsMoveToPointEnabled="True" Value="{Binding Opacity}" AutomationProperties.Name="Background opacity" />
+  <TextBlock Text="{Binding OpacityHint, Source={x:Static services:AppLocalization.Current}}" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,2,0,10" />
+
+  <Grid Margin="0,4,0,8">
+   <Grid.ColumnDefinitions>
+    <ColumnDefinition />
+    <ColumnDefinition Width="20" />
+    <ColumnDefinition />
+   </Grid.ColumnDefinitions>
+   <StackPanel Grid.Column="0">
+    <Label Content="{Binding Corners, Source={x:Static services:AppLocalization.Current}}" />
+    <ComboBox x:Name="CornersBox" SelectedItem="{Binding Corners}" AutomationProperties.Name="Corners" />
+   </StackPanel>
+   <StackPanel Grid.Column="2">
+    <Label Content="{Binding IconSize, Source={x:Static services:AppLocalization.Current}}" />
+    <ComboBox x:Name="IconSizeBox" SelectedItem="{Binding IconSize}" AutomationProperties.Name="Icon size" />
+   </StackPanel>
+  </Grid>
+
+  <Grid Margin="0,4,0,8">
+   <Grid.ColumnDefinitions>
+    <ColumnDefinition />
+    <ColumnDefinition Width="20" />
+    <ColumnDefinition />
+   </Grid.ColumnDefinitions>
+   <StackPanel Grid.Column="0">
+    <Label Content="{Binding GroupOrientationLabel, Source={x:Static services:AppLocalization.Current}}" />
+    <ComboBox x:Name="OrientationBox" SelectedItem="{Binding Orientation}" AutomationProperties.Name="Group orientation" />
+   </StackPanel>
+   <StackPanel Grid.Column="2">
+    <Label Content="{Binding LayoutLabel, Source={x:Static services:AppLocalization.Current}}" />
+    <ComboBox x:Name="LayoutBox" SelectedItem="{Binding Layout}" AutomationProperties.Name="Icon layout" />
+   </StackPanel>
+  </Grid>
+
+  <Grid Margin="0,4,0,8">
+   <Grid.ColumnDefinitions>
+    <ColumnDefinition />
+    <ColumnDefinition Width="20" />
+    <ColumnDefinition />
+   </Grid.ColumnDefinitions>
+   <StackPanel Grid.Column="0">
+    <Label Content="{Binding TitleFontLabel, Source={x:Static services:AppLocalization.Current}}" />
+    <ComboBox x:Name="TitleFontBox" SelectedItem="{Binding TitleFont}" AutomationProperties.Name="Title font">
+     <ComboBox.ItemTemplate>
+      <DataTemplate>
+       <TextBlock Text="{Binding}" FontFamily="{Binding Converter={StaticResource FontConverter}}" FontSize="13" VerticalAlignment="Center" />
+      </DataTemplate>
+     </ComboBox.ItemTemplate>
+    </ComboBox>
+   </StackPanel>
+   <StackPanel Grid.Column="2">
+    <Label Content="{Binding ItemFontLabel, Source={x:Static services:AppLocalization.Current}}" />
+    <ComboBox x:Name="ItemFontBox" SelectedItem="{Binding ItemFont}" AutomationProperties.Name="Icon labels font">
+     <ComboBox.ItemTemplate>
+      <DataTemplate>
+       <TextBlock Text="{Binding}" FontFamily="{Binding Converter={StaticResource FontConverter}}" FontSize="13" VerticalAlignment="Center" />
+      </DataTemplate>
+     </ComboBox.ItemTemplate>
+    </ComboBox>
+   </StackPanel>
+  </Grid>
+
+  <Label Content="{Binding BadgeStyleLabel, Source={x:Static services:AppLocalization.Current}}" Margin="0,4,0,2" />
+  <WrapPanel Margin="0,2,0,8">
+   <WrapPanel.Resources>
+    <Style x:Key="BadgeMainButton" TargetType="Button">
+     <Setter Property="Height" Value="32" />
+     <Setter Property="Margin" Value="0,0,8,6" />
+     <Setter Property="Padding" Value="12,4" />
+     <Setter Property="Cursor" Value="Hand" />
+     <Setter Property="Template">
+      <Setter.Value>
+       <ControlTemplate TargetType="Button">
+        <Border x:Name="Brd" Background="{DynamicResource ButtonBackground}" BorderBrush="{DynamicResource Border}"
+          BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+         <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" />
+        </Border>
+        <ControlTemplate.Triggers>
+         <Trigger Property="IsMouseOver" Value="True">
+          <Setter TargetName="Brd" Property="BorderBrush" Value="{DynamicResource Accent}" />
+         </Trigger>
+        </ControlTemplate.Triggers>
+       </ControlTemplate>
+      </Setter.Value>
+     </Setter>
+    </Style>
+   </WrapPanel.Resources>
+   <Button Style="{StaticResource BadgeMainButton}" Click="OpenBadgePicker" ToolTip="{Binding BadgePickerTitle, Source={x:Static services:AppLocalization.Current}}">
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+     <Path Data="{Binding BadgeStyle, Converter={StaticResource BadgePathConverter}}"
+       Width="14" Height="14" Stretch="Uniform" Fill="Black" Margin="0,0,8,0" VerticalAlignment="Center" />
+      <TextBlock Text="{Binding BadgeStyleIcons, Source={x:Static services:AppLocalization.Current}}"
+        FontSize="12" Foreground="{DynamicResource Foreground}" FontWeight="SemiBold" VerticalAlignment="Center" />
+      <TextBlock Text="&#x2026;" FontSize="12" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+    </StackPanel>
+   </Button>
+   <Button Style="{StaticResource BadgeMainButton}" Click="PickBadgeImage" ToolTip="{Binding ChooseBadgeImageTitle, Source={x:Static services:AppLocalization.Current}}">
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+     <Path Data="M 0,0 L 10,0 L 10,10 L 0,10 Z M 1,1 L 9,1 L 9,9 L 1,9 Z M 2.5,4 A 1,1 0 1 0 2.5,2 A 1,1 0 1 0 2.5,4 M 2,8 L 8,8 L 5.5,4.5 L 4,6.5 L 3,5 Z"
+       Width="14" Height="14" Stretch="Uniform" Fill="Black" Margin="0,0,8,0" VerticalAlignment="Center" />
+     <TextBlock Text="{Binding BadgeStyleImage, Source={x:Static services:AppLocalization.Current}}"
+       FontSize="12" Foreground="{DynamicResource Foreground}" FontWeight="SemiBold" VerticalAlignment="Center" />
+    </StackPanel>
+   </Button>
+  </WrapPanel>
+
+  <DockPanel Margin="0,2,0,8">
+   <Button Content="{Binding BadgeColorLabel, Source={x:Static services:AppLocalization.Current}}" Click="BadgeColorClick" Margin="0,0,12,0" />
+   <TextBlock Text="{Binding BadgeColor}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" FontWeight="SemiBold" />
+  </DockPanel>
+
+  <CheckBox Content="{Binding IconsOnlyLabel, Source={x:Static services:AppLocalization.Current}}"
+    IsChecked="{Binding IconsOnly}" Margin="0,4,0,6" FontWeight="Bold" />
+
+  <CheckBox Content="{Binding SubtleBorder, Source={x:Static services:AppLocalization.Current}}" IsChecked="{Binding Border}" />
+  <CheckBox Content="{Binding ShowTitle, Source={x:Static services:AppLocalization.Current}}" IsChecked="{Binding ShowTitle}" />
+  <CheckBox Content="{Binding HideHeaderWhenCollapsed, Source={x:Static services:AppLocalization.Current}}"
+    ToolTip="{Binding HideHeaderWhenCollapsedHint, Source={x:Static services:AppLocalization.Current}}"
+    IsChecked="{Binding HideHeaderWhenCollapsed}" />
+
+  <DockPanel Margin="0,8,0,8">
+   <Button Content="{Binding TitleColor, Source={x:Static services:AppLocalization.Current}}" Click="TitleColor" Margin="0,0,12,0" />
+   <TextBlock Text="{Binding TitleColor}" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" FontWeight="SemiBold" />
+  </DockPanel>
+
+  <DockPanel Margin="0,8,0,4">
+   <TextBlock Text="{Binding TitleSize, Source={x:Static services:AppLocalization.Current}}" Foreground="{DynamicResource Muted}" FontSize="12" FontWeight="SemiBold" />
+   <TextBlock Text="{Binding TitleSize, StringFormat={}{0:F0} pt}" HorizontalAlignment="Right" Foreground="{DynamicResource Accent}" FontWeight="Bold" />
+  </DockPanel>
+  <Slider Minimum="10" Maximum="28" TickFrequency="1" SmallChange="1" LargeChange="2" IsSnapToTickEnabled="True" IsMoveToPointEnabled="True"
+    Value="{Binding TitleSize}" Margin="0,4,0,8" AutomationProperties.Name="Title size" />
+ </StackPanel>
+</UserControl>
