@@ -845,11 +845,12 @@ public partial class GroupWindow : Window
         if (!Model.RolledUp || !_isHoverExpanded) return;
         if (_moving || _resizing || _contextMenuIsOpen || _dragItem is not null) return;
 
-        NativeMethods.GetCursorPos(out var pt);
-        double scale = _scale > 0 ? _scale : 1.0;
-        var mousePt = new Point(pt.X / scale, pt.Y / scale);
-        var winRect = new Rect(Left, Top, Math.Max(ActualWidth, Width), Math.Max(ActualHeight, Height));
-        if (winRect.Contains(mousePt) || IsMouseOver)
+        // Compare in physical pixels: Left/Top hold physical coordinates while Width/Height are DIPs,
+        // so mixing them misjudged the pointer position on scaled (125%+) displays.
+        if (IsMouseOver) return;
+        if (NativeMethods.GetCursorPos(out var pt) && _handle != IntPtr.Zero &&
+            NativeMethods.GetWindowRect(_handle, out var rect) &&
+            pt.X >= rect.Left && pt.X < rect.Right && pt.Y >= rect.Top && pt.Y < rect.Bottom)
         {
             return;
         }
@@ -1188,55 +1189,50 @@ public partial class GroupWindow : Window
             dataObject.SetFileDropList(collection);
         }
 
+        var existedBefore = selectedItems.Where(si => ReferencePath.Exists(si.Model.Path)).ToHashSet();
         s_activeInternalDrop = false;
         var result = DragDrop.DoDragDrop((DependencyObject)sender, dataObject, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
 
-        if (!s_activeInternalDrop && result != DragDropEffects.None)
+        if (!s_activeInternalDrop)
         {
+            // Only a move takes the item out of the group. Dropping onto an application or a folder that copies
+            // or links the file (a browser upload, a messenger, Ctrl+drag in Explorer) must leave both the item
+            // and its file untouched. Explorer performs most moves itself and then reports DragDropEffects.None,
+            // so an item whose file disappeared during the drop is treated as moved too.
+            bool reportedMove = (result & DragDropEffects.Move) != 0;
+            var moved = selectedItems
+                .Where(si => existedBefore.Contains(si) && (reportedMove || !ReferencePath.Exists(si.Model.Path)))
+                .ToList();
             bool anyRecycleBin = false;
-            foreach (var si in selectedItems)
+            foreach (var si in moved)
             {
-                bool isRecycleBin = ShortcutStorageService.IsRecycleBin(si.Model.Path);
-                if (isRecycleBin) anyRecycleBin = true;
+                string path = si.Model.Path;
+                bool isRecycleBin = ShortcutStorageService.IsRecycleBin(path);
+                anyRecycleBin |= isRecycleBin;
+                // An unoptimized move leaves the source behind for the drag source to remove.
+                if (ShortcutStorageService.IsInStorage(path) && ReferencePath.Exists(path) &&
+                    !ShortcutStorageService.DeleteStorageItem(path)) continue;
                 _app.Groups.RemoveItem(Model, si.Model.Id);
-
-                if (isRecycleBin)
-                {
-                    if (ShortcutStorageService.IsInStorage(si.Model.Path))
-                    {
-                        try { File.Delete(si.Model.Path); } catch { }
-                    }
-                    ShortcutStorageService.CleanupDesktopRecycleBinShortcuts();
-                }
-                else
-                {
-                    if (ShortcutStorageService.IsInStorage(si.Model.Path))
-                    {
-                        try
-                        {
-                            if (File.Exists(si.Model.Path)) File.Delete(si.Model.Path);
-                            else if (Directory.Exists(si.Model.Path)) Directory.Delete(si.Model.Path, true);
-                            ShortcutStorageService.NotifyDelete(si.Model.Path);
-                        }
-                        catch { }
-                    }
-                }
             }
 
-            _app.SaveSoon();
-
-            if (anyRecycleBin)
+            if (moved.Count > 0)
             {
-                ShortcutStorageService.SyncDesktopRecycleBinVisibility(_app.Groups.Settings.Groups, _app.Desktop);
-                Dispatcher.InvokeAsync(async () =>
-                {
-                    await Task.Delay(250);
-                    ShortcutStorageService.CleanupDesktopRecycleBinShortcuts();
-                    _app.Desktop.RefreshDesktop();
-                });
-            }
+                _app.SaveSoon();
 
-            ShortcutStorageService.NotifyDesktopChanged();
+                if (anyRecycleBin)
+                {
+                    ShortcutStorageService.CleanupDesktopRecycleBinShortcuts();
+                    ShortcutStorageService.SyncDesktopRecycleBinVisibility(_app.Groups.Settings.Groups, _app.Desktop);
+                    Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(250);
+                        ShortcutStorageService.CleanupDesktopRecycleBinShortcuts();
+                        _app.Desktop.RefreshDesktop();
+                    });
+                }
+
+                ShortcutStorageService.NotifyDesktopChanged();
+            }
         }
 
         s_activeInternalDrop = false;
@@ -1301,7 +1297,7 @@ public partial class GroupWindow : Window
             var rawPaths = ExtractDroppedPaths(e.Data);
             if (rawPaths.Length > 0)
             {
-                var paths = ShortcutStorageService.ProcessIncomingPaths(rawPaths);
+                var paths = ShortcutStorageService.ProcessIncomingPaths(rawPaths, Model);
                 if (paths.Count > 0)
                 {
                     int added = _app.Groups.AddPaths(Model, paths);
@@ -1315,11 +1311,18 @@ public partial class GroupWindow : Window
         e.Handled = true;
     }
 
-    private static void AddCleanPath(List<string> list, string? raw)
+    private static void AddCleanPath(List<string> list, string? raw, bool fromText = false)
     {
         if (string.IsNullOrWhiteSpace(raw)) return;
         string path = raw.Trim().Trim('\0', '"', '\'').Trim();
         if (string.IsNullOrWhiteSpace(path)) return;
+
+        // Links dragged from a browser arrive as text; ProcessIncomingPaths turns them into .url shortcuts.
+        if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            list.Add(path);
+            return;
+        }
 
         if (path.StartsWith("::{", StringComparison.Ordinal) || path.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
         {
@@ -1327,11 +1330,17 @@ public partial class GroupWindow : Window
             return;
         }
 
+        if (fromText && !System.IO.Path.IsPathFullyQualified(path)) return;
+
         if (ReferencePath.Exists(path))
         {
             list.Add(path);
             return;
         }
+
+        // Arbitrary dragged text such as "Documents" must not be matched against desktop items:
+        // that would silently move an unrelated desktop folder into the group.
+        if (fromText) return;
 
         string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         string userPath = System.IO.Path.Combine(userDesktop, path);
@@ -1414,7 +1423,7 @@ public partial class GroupWindow : Window
                 if (data.GetData(DataFormats.UnicodeText) is string text && !string.IsNullOrWhiteSpace(text))
                 {
                     var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    foreach (var line in lines) AddCleanPath(list, line);
+                    foreach (var line in lines) AddCleanPath(list, line, fromText: true);
                 }
             }
         }
@@ -1497,12 +1506,18 @@ public partial class GroupWindow : Window
 
         AddMenu(menu, restoreHeader, () =>
         {
+            bool failed = false;
             foreach (var si in selectedItems)
             {
-                ShortcutStorageService.RestoreToDesktop(si.Model.Path);
-                _app.Groups.RemoveItem(Model, si.Model.Id);
+                string path = si.Model.Path;
+                // Plain references (files outside the storage folder) are only dropped from the group;
+                // storage entries stay in the group if they could not be moved back.
+                bool needsRestore = ShortcutStorageService.IsInStorage(path) && ReferencePath.Exists(path);
+                if (!needsRestore || ShortcutStorageService.RestoreToDesktop(path)) _app.Groups.RemoveItem(Model, si.Model.Id);
+                else failed = true;
             }
             _app.SaveSoon();
+            if (failed) _app.ShowError(AppLocalization.Current.RestoreToDesktopFailed);
         });
 
         string removeHeader = selectedItems.Count > 1
@@ -1511,12 +1526,7 @@ public partial class GroupWindow : Window
 
         AddMenu(menu, removeHeader, () =>
         {
-            foreach (var si in selectedItems)
-            {
-                ShortcutStorageService.DeleteStorageItem(si.Model.Path);
-                _app.Groups.RemoveItem(Model, si.Model.Id);
-            }
-            _app.SaveSoon();
+            RemoveItems(selectedItems);
         });
 
         menu.Opened += (_, _) => _contextMenuIsOpen = true;
@@ -1533,6 +1543,20 @@ public partial class GroupWindow : Window
         menu.PlacementTarget = (UIElement)sender;
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    private void RemoveItems(IEnumerable<ItemViewModel> items)
+    {
+        bool failed = false;
+        foreach (var si in items.ToList())
+        {
+            // Removing an item must never destroy the user's original file: shortcuts go to the Recycle Bin,
+            // files and folders that were moved off the desktop are put back there.
+            if (ShortcutStorageService.ReleaseStorageItem(si.Model.Path)) _app.Groups.RemoveItem(Model, si.Model.Id);
+            else failed = true;
+        }
+        _app.SaveSoon();
+        if (failed) _app.ShowError(AppLocalization.Current.RestoreToDesktopFailed);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -1559,12 +1583,7 @@ public partial class GroupWindow : Window
             var selected = _viewModel.Items.Where(i => i.IsSelected).ToList();
             if (selected.Count > 0)
             {
-                foreach (var si in selected)
-                {
-                    ShortcutStorageService.DeleteStorageItem(si.Model.Path);
-                    _app.Groups.RemoveItem(Model, si.Model.Id);
-                }
-                _app.SaveSoon();
+                RemoveItems(selected);
                 e.Handled = true;
                 return;
             }
@@ -1606,12 +1625,7 @@ public partial class GroupWindow : Window
             {
                 selected = [singleItem];
             }
-            foreach (var si in selected)
-            {
-                ShortcutStorageService.DeleteStorageItem(si.Model.Path);
-                _app.Groups.RemoveItem(Model, si.Model.Id);
-            }
-            _app.SaveSoon();
+            RemoveItems(selected);
             e.Handled = true;
             return;
         }

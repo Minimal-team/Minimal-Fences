@@ -195,13 +195,23 @@ internal static class ShortcutStorageService
                 };
                 int res = NativeMethods.SHFileOperation(ref op);
                 if (res == 0 && !op.fAnyOperationsAborted) moved = true;
-                else
+                else if (File.Exists(sourcePath))
                 {
                     try
                     {
-                        File.Copy(sourcePath, destPath, true);
-                        try { File.Delete(sourcePath); } catch { }
-                        moved = true;
+                        File.Copy(sourcePath, destPath, false);
+                        try
+                        {
+                            File.Delete(sourcePath);
+                            moved = true;
+                        }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                        {
+                            // The original could not be removed: keep referencing it instead of leaving
+                            // two diverging copies (one on the desktop, one hidden in the storage folder).
+                            try { File.Delete(destPath); } catch { }
+                            Log.Write($"Desktop item could not be moved, keeping the original: {sourcePath}", ex);
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -379,7 +389,11 @@ internal static class ShortcutStorageService
         try
         {
             Directory.CreateDirectory(StorageDirectory);
-            string name = Path.GetFileNameWithoutExtension(sourcePath.TrimEnd('\\', '/'));
+            string trimmedSource = sourcePath.TrimEnd('\\', '/');
+            // Folder names such as "Project.v2" have no extension to strip.
+            string name = Directory.Exists(sourcePath)
+                ? Path.GetFileName(trimmedSource)
+                : Path.GetFileNameWithoutExtension(trimmedSource);
             if (string.IsNullOrWhiteSpace(name)) name = "Shortcut";
             string shortcutPath = GetUniqueDestinationPath(StorageDirectory, name + ".lnk");
             if (CreateShortcut(sourcePath, shortcutPath))
@@ -401,7 +415,8 @@ internal static class ShortcutStorageService
         try
         {
             Directory.CreateDirectory(StorageDirectory);
-            string safeTitle = title ?? "Web Link";
+            string safeTitle = title ??
+                (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host) ? uri.Host : "Web Link");
             foreach (char c in Path.GetInvalidFileNameChars()) safeTitle = safeTitle.Replace(c, '_');
             string shortcutPath = GetUniqueDestinationPath(StorageDirectory, safeTitle + ".url");
             File.WriteAllText(shortcutPath, $"[InternetShortcut]\r\nURL={url}\r\n");
@@ -411,13 +426,19 @@ internal static class ShortcutStorageService
         catch { return null; }
     }
 
-    public static List<string> ProcessIncomingPaths(IEnumerable<string> paths)
+    public static List<string> ProcessIncomingPaths(IEnumerable<string> paths, Group? group = null)
     {
         var result = new List<string>();
+        var known = group is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(group.Items.SelectMany(i => new[] { i.Path, Identity(i.Path) }), StringComparer.OrdinalIgnoreCase);
         foreach (var path in paths)
         {
             if (string.IsNullOrWhiteSpace(path)) continue;
             string trimmed = path.Trim().Trim('"', '\'');
+            // Every import creates a new file in the storage folder, so an item that is already in
+            // the group would otherwise reappear as "name (2).lnk" and bypass duplicate detection.
+            if (group is not null && (known.Contains(trimmed) || !known.Add(Identity(trimmed)))) continue;
             if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
@@ -429,6 +450,48 @@ internal static class ShortcutStorageService
             result.Add(processed);
         }
         return result;
+    }
+
+    /// <summary>
+    /// A key that is equal for an original item and the storage entry created from it
+    /// (a file and a shortcut to it, a copied shortcut, a virtual shell folder, a web link).
+    /// </summary>
+    private static string Identity(string path)
+    {
+        try
+        {
+            string p = path.Trim();
+            if (p.StartsWith("::{", StringComparison.Ordinal) || p.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+                return "shell|" + p;
+            if (p.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || p.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return "url|" + p;
+            string ext = Path.GetExtension(p);
+            if (ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) && File.Exists(p))
+            {
+                var link = (IShellLinkW)new ShellLink();
+                ((IPersistFile)link).Load(p, 0);
+                var pathBuffer = new StringBuilder(1024);
+                link.GetPath(pathBuffer, pathBuffer.Capacity, IntPtr.Zero, 0);
+                var argsBuffer = new StringBuilder(1024);
+                link.GetArguments(argsBuffer, argsBuffer.Capacity);
+                string target = pathBuffer.ToString().Trim();
+                string args = argsBuffer.ToString().Trim();
+                if (args.StartsWith("::{", StringComparison.Ordinal) || args.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+                    return "shell|" + args;
+                if (!string.IsNullOrEmpty(target))
+                    return Path.GetFullPath(target).TrimEnd('\\', '/') + (args.Length > 0 ? "|" + args : "");
+            }
+            else if (ext.Equals(".url", StringComparison.OrdinalIgnoreCase) && File.Exists(p))
+            {
+                string? url = File.ReadLines(p).FirstOrDefault(l => l.StartsWith("URL=", StringComparison.OrdinalIgnoreCase))?[4..].Trim();
+                if (!string.IsNullOrEmpty(url)) return "url|" + url;
+            }
+            return Path.GetFullPath(p).TrimEnd('\\', '/');
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Runtime.InteropServices.COMException or InvalidCastException)
+        {
+            return path;
+        }
     }
 
     public static string? ResolveTarget(string? path)
@@ -443,7 +506,10 @@ internal static class ShortcutStorageService
                 var link = (IShellLinkW)new ShellLink();
                 ((IPersistFile)link).Load(path, 0);
 
-                link.Resolve(IntPtr.Zero, 1);
+                // SLR_NO_UI | SLR_NOUPDATE | SLR_NOSEARCH | SLR_NOTRACK: this runs on the UI thread for every
+                // item (recycle bin detection), so a dangling shortcut must not trigger a multi-second search.
+                try { link.Resolve(IntPtr.Zero, 0x1 | 0x8 | 0x10 | 0x20); }
+                catch (System.Runtime.InteropServices.COMException) { }
 
                 var pathBuffer = new StringBuilder(1024);
                 link.GetPath(pathBuffer, pathBuffer.Capacity, IntPtr.Zero, 0);
@@ -546,7 +612,41 @@ internal static class ShortcutStorageService
         return false;
     }
 
-    public static void SetDesktopRecycleBinHidden(bool hidden)
+    private const string AppKey = @"Software\MinimalFences";
+    private const string HiddenByAppValue = "RecycleBinHiddenByApp";
+
+    private static bool IsRecycleBinHiddenByApp()
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(AppKey);
+            return key?.GetValue(HiddenByAppValue) is int val && val != 0;
+        }
+        catch { return false; }
+    }
+
+    private static void SetRecycleBinHiddenByApp(bool value)
+    {
+        try
+        {
+            if (value)
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(AppKey);
+                key?.SetValue(HiddenByAppValue, 1, Microsoft.Win32.RegistryValueKind.DWord);
+            }
+            else
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(AppKey, writable: true);
+                key?.DeleteValue(HiddenByAppValue, throwOnMissingValue: false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write("Failed to update the Recycle Bin ownership marker.", ex);
+        }
+    }
+
+    private static void SetDesktopRecycleBinHidden(bool hidden)
     {
         try
         {
@@ -566,28 +666,42 @@ internal static class ShortcutStorageService
         }
     }
 
+    /// <summary>Hides the desktop Recycle Bin and remembers that the app did it. Returns true when something changed.</summary>
+    private static bool HideDesktopRecycleBin()
+    {
+        if (IsDesktopRecycleBinHidden()) return false; // already hidden (possibly by the user): never claim ownership
+        SetDesktopRecycleBinHidden(true);
+        SetRecycleBinHiddenByApp(true);
+        return true;
+    }
+
+    /// <summary>
+    /// Shows the desktop Recycle Bin again, but only if the app hid it. A Recycle Bin the user hid in
+    /// Windows settings stays hidden. Returns true when something changed.
+    /// </summary>
+    public static bool ReleaseDesktopRecycleBin()
+    {
+        if (!IsRecycleBinHiddenByApp()) return false;
+        SetRecycleBinHiddenByApp(false);
+        if (!IsDesktopRecycleBinHidden()) return false;
+        SetDesktopRecycleBinHidden(false);
+        return true;
+    }
+
     public static void SyncDesktopRecycleBinVisibility(IEnumerable<Group> groups, DesktopIntegrationService? desktopService = null)
     {
         bool shouldBeHidden = groups.Any(g => g.Items.Any(i => IsRecycleBin(i.Path)));
-        bool currentlyHidden = IsDesktopRecycleBinHidden();
-        if (shouldBeHidden != currentlyHidden)
-        {
-            SetDesktopRecycleBinHidden(shouldBeHidden);
-            if (!shouldBeHidden)
-            {
-                CleanupDesktopRecycleBinShortcuts();
-            }
-            if (desktopService is not null)
-            {
-                desktopService.RefreshDesktop();
-            }
-            else
-            {
-                DesktopIntegrationService.RefreshDesktopView();
-            }
-        }
+        bool changed = shouldBeHidden ? HideDesktopRecycleBin() : ReleaseDesktopRecycleBin();
+        if (!changed) return;
+        if (!shouldBeHidden) CleanupDesktopRecycleBinShortcuts();
+        if (desktopService is not null) desktopService.RefreshDesktop();
+        else DesktopIntegrationService.RefreshDesktopView();
     }
 
+    /// <summary>
+    /// Removes Recycle Bin shortcuts created by the app (explorer.exe shell:RecycleBinFolder) that ended up
+    /// on the desktop. Other files are never touched, whatever their name.
+    /// </summary>
     public static void CleanupDesktopRecycleBinShortcuts()
     {
         var desktopDirs = new List<string>
@@ -600,18 +714,14 @@ internal static class ShortcutStorageService
         string? userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
         if (!string.IsNullOrEmpty(userProfile)) desktopDirs.Add(Path.Combine(userProfile, "OneDrive", "Desktop"));
 
-        foreach (var dir in desktopDirs.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var dir in desktopDirs.Where(d => !string.IsNullOrEmpty(d)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(dir)) continue;
             try
             {
-                var files = Directory.GetFiles(dir, "*.lnk");
-                foreach (var file in files)
+                foreach (var file in Directory.GetFiles(dir, "*.lnk"))
                 {
-                    string name = Path.GetFileNameWithoutExtension(file);
-                    if (name.StartsWith("Корзина", StringComparison.OrdinalIgnoreCase) ||
-                        name.StartsWith("Recycle Bin", StringComparison.OrdinalIgnoreCase) ||
-                        IsRecycleBin(file))
+                    if (string.Equals(Identity(file), "shell|shell:RecycleBinFolder", StringComparison.OrdinalIgnoreCase))
                     {
                         try { File.Delete(file); } catch { }
                     }
@@ -630,11 +740,16 @@ internal static class ShortcutStorageService
                 try { File.Delete(path); } catch { }
             }
             CleanupDesktopRecycleBinShortcuts();
+            // An explicit request to put the Recycle Bin back on the desktop.
+            SetRecycleBinHiddenByApp(false);
             SetDesktopRecycleBinHidden(false);
             DesktopIntegrationService.RefreshDesktopView();
             return true;
         }
 
+        // Only items the app itself moved into its storage folder are moved back. A plain reference to a
+        // file elsewhere (e.g. in Documents) must never be relocated to the desktop.
+        if (!IsInStorage(path)) return false;
         if (!File.Exists(path) && !Directory.Exists(path)) return false;
 
         if (IsSystemFolder(path)) return false;
@@ -658,6 +773,25 @@ internal static class ShortcutStorageService
         }
     }
 
+    private static bool IsShortcutFile(string path) =>
+        File.Exists(path) &&
+        (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".url", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Cleans up the storage entry of an item that is being removed from a group. Shortcuts are sent to the
+    /// Recycle Bin (their targets stay untouched); original files and folders that were moved off the desktop
+    /// are moved back there instead of being deleted. Returns false when the item should stay in the group
+    /// because its file could not be handled.
+    /// </summary>
+    public static bool ReleaseStorageItem(string path)
+    {
+        if (!IsInStorage(path)) return true;
+        if (!File.Exists(path) && !Directory.Exists(path)) return true;
+        if (IsRecycleBin(path) || IsShortcutFile(path)) return DeleteStorageItem(path);
+        return RestoreToDesktop(path);
+    }
+
+    /// <summary>Sends a storage entry to the Recycle Bin. Never deletes folders permanently.</summary>
     public static bool DeleteStorageItem(string path)
     {
         if (!IsInStorage(path)) return false;
@@ -670,15 +804,19 @@ internal static class ShortcutStorageService
                 fFlags = NativeMethods.FofAllowUndo | NativeMethods.FofNoConfirmation | NativeMethods.FofSilent
             };
             int res = NativeMethods.SHFileOperation(ref op);
-            if (res == 0 && !op.fAnyOperationsAborted)
+            if (res == 0 && !op.fAnyOperationsAborted && !File.Exists(path) && !Directory.Exists(path))
             {
                 NotifyDelete(path);
                 return true;
             }
-            if (Directory.Exists(path)) Directory.Delete(path, true);
-            else if (File.Exists(path)) File.Delete(path);
-            NotifyDelete(path);
-            return true;
+            if (IsShortcutFile(path))
+            {
+                File.Delete(path);
+                NotifyDelete(path);
+                return true;
+            }
+            Log.Write($"DeleteStorageItem could not recycle {path} (code {res}); the item was kept.");
+            return !File.Exists(path) && !Directory.Exists(path);
         }
         catch (Exception ex)
         {

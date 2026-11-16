@@ -59,6 +59,11 @@ internal sealed class AppController : IDisposable
                 {
                     try { StartupService.SetEnabled(true); } catch { }
                 }
+                // Keep the autostart entry pointing at this executable after the app folder was moved or updated.
+                if (StartupService.IsEnabled() && !StartupService.PointsToCurrentExecutable())
+                {
+                    try { StartupService.SetEnabled(true); } catch { }
+                }
                 Settings.StartWithWindows = StartupService.IsEnabled();
             }
         }
@@ -124,12 +129,18 @@ internal sealed class AppController : IDisposable
         if (MessageBox.Show(AppLocalization.Current.DeleteGroupConfirm(group.Name),
             AppLocalization.Current.DeleteGroupTitle, MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) == MessageBoxResult.Yes)
         {
+            bool restored = true;
             foreach (var item in group.Items.ToArray())
             {
-                if (ShortcutStorageService.IsInStorage(item.Path))
-                {
-                    ShortcutStorageService.RestoreToDesktop(item.Path);
-                }
+                if (!ShortcutStorageService.IsInStorage(item.Path) || !ReferencePath.Exists(item.Path)) continue;
+                if (ShortcutStorageService.RestoreToDesktop(item.Path)) Groups.RemoveItem(group, item.Id);
+                else restored = false;
+            }
+            if (!restored)
+            {
+                // Deleting the group now would leave these files hidden in the storage folder with no way to reach them.
+                ShowError(AppLocalization.Current.RestoreToDesktopFailed);
+                return;
             }
             Groups.Delete(group.Id);
         }
@@ -154,7 +165,7 @@ internal sealed class AppController : IDisposable
         var dialog = new OpenFileDialog { Title = AppLocalization.Current.AddFilesDialogTitle, Multiselect = true, CheckFileExists = true, Filter = AppLocalization.Current.AllFilesFilter };
         if (dialog.ShowDialog() == true)
         {
-            var paths = ShortcutStorageService.ProcessIncomingPaths(dialog.FileNames);
+            var paths = ShortcutStorageService.ProcessIncomingPaths(dialog.FileNames, group);
             if (paths.Count > 0)
             {
                 Groups.AddPaths(group, paths);
@@ -167,7 +178,7 @@ internal sealed class AppController : IDisposable
         var dialog = new OpenFolderDialog { Title = AppLocalization.Current.AddFolderDialogTitle, Multiselect = true };
         if (dialog.ShowDialog() == true)
         {
-            var paths = ShortcutStorageService.ProcessIncomingPaths(dialog.FolderNames);
+            var paths = ShortcutStorageService.ProcessIncomingPaths(dialog.FolderNames, group);
             if (paths.Count > 0)
             {
                 Groups.AddPaths(group, paths);
@@ -285,11 +296,7 @@ internal sealed class AppController : IDisposable
         Settings.Groups.CollectionChanged -= GroupsChanged;
         _settingsWindow?.Close();
         SaveNow();
-        if (ShortcutStorageService.IsDesktopRecycleBinHidden())
-        {
-            ShortcutStorageService.SetDesktopRecycleBinHidden(false);
-            Desktop.RefreshDesktop();
-        }
+        if (ShortcutStorageService.ReleaseDesktopRecycleBin()) Desktop.RefreshDesktop();
         foreach (var window in _windows.Values.ToArray()) window.Close();
         _windows.Clear();
         _tray.Dispose(); Desktop.Dispose(); Shortcuts.Dispose(); Groups.Dispose();

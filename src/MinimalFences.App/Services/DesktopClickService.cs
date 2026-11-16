@@ -75,7 +75,14 @@ internal sealed class DesktopClickService : IDisposable
             if (click.Generation != Volatile.Read(ref _generation))
             { tracker.Reset(); down = null; continue; }
 
-            bool empty = IsEmptyDesktop(click);
+            bool empty;
+            try { empty = IsEmptyDesktop(click); }
+            catch (Exception e)
+            {
+                // Any unexpected failure here would otherwise kill this thread and crash the whole process.
+                Log.Write("Desktop hit testing failed.", e);
+                empty = false;
+            }
             if (!click.Released)
             {
                 down = empty ? click : null;
@@ -139,14 +146,18 @@ internal sealed class DesktopClickService : IDisposable
                             "StartMenuExperienceHost" or "CabinetWClass")
                 return false;
 
-            // Wallpaper Engine support
-            try
+            // Wallpaper Engine support: its render window lives inside the desktop (WorkerW/Progman).
+            // Its regular windows (settings, editor) are ordinary top-level windows and must not count.
+            if (rootName is "Progman" or "WorkerW")
             {
-                using var proc = Process.GetProcessById((int)pid);
-                if (proc.ProcessName.Contains("wallpaper", StringComparison.OrdinalIgnoreCase))
-                    return true;
+                try
+                {
+                    using var proc = Process.GetProcessById((int)pid);
+                    if (proc.ProcessName.Contains("wallpaper", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch { }
             }
-            catch { }
 
             // Real Windows desktop must belong to explorer.exe
             if (!IsExplorerProcess(pid))

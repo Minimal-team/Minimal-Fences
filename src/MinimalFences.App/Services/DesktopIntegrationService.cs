@@ -176,14 +176,29 @@ internal sealed class DesktopIntegrationService : IDisposable
                 case "SHIFT": modifiers |= 4; break;
                 case "WIN": modifiers |= 8; break;
                 default:
-                    if (key != 0 || !Enum.TryParse<Forms.Keys>(token, true, out var parsed) || (uint)parsed > 0xff)
-                        return "Use a shortcut such as Ctrl+Alt+F or Ctrl+Shift+F12.";
-                    key = (uint)parsed;
+                    if (key != 0 || ParseKey(token) is not { } parsed)
+                        return AppLocalization.Current.HotkeyFormatError;
+                    key = parsed;
                     break;
             }
         }
-        if (key == 0 || (modifiers & 0xf) == 0) return "Choose a key and at least one modifier (Ctrl, Alt, Shift or Win).";
-        return NativeMethods.RegisterHotKey(_messages.Handle, 1, modifiers, key) ? null : "This shortcut is already in use or unavailable.";
+        if (key == 0 || (modifiers & 0xf) == 0) return AppLocalization.Current.HotkeyModifierError;
+        return NativeMethods.RegisterHotKey(_messages.Handle, 1, modifiers, key) ? null : AppLocalization.Current.HotkeyInUseError;
+    }
+
+    private static uint? ParseKey(string token)
+    {
+        // "1" must mean the digit key (D1), not Keys value 1 (the left mouse button); Enum.TryParse also
+        // accepts numbers and comma-separated flag lists, which are never valid key names here.
+        if (token.Length == 1 && char.IsAsciiDigit(token[0])) return (uint)Forms.Keys.D0 + (uint)(token[0] - '0');
+        if (token.Any(c => !char.IsAsciiLetterOrDigit(c)) || char.IsAsciiDigit(token[0])) return null;
+        if (!Enum.TryParse<Forms.Keys>(token, true, out var parsed) || !Enum.IsDefined(parsed)) return null;
+        uint value = (uint)parsed;
+        bool isModifierOrMouse = parsed is Forms.Keys.None or Forms.Keys.LButton or Forms.Keys.RButton or Forms.Keys.MButton
+            or Forms.Keys.XButton1 or Forms.Keys.XButton2 or Forms.Keys.ShiftKey or Forms.Keys.ControlKey or Forms.Keys.Menu
+            or Forms.Keys.LWin or Forms.Keys.RWin or Forms.Keys.LShiftKey or Forms.Keys.RShiftKey or Forms.Keys.LControlKey
+            or Forms.Keys.RControlKey or Forms.Keys.LMenu or Forms.Keys.RMenu;
+        return value is > 0 and <= 0xff && !isModifierOrMouse ? value : null;
     }
 
     private IntPtr Message(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)

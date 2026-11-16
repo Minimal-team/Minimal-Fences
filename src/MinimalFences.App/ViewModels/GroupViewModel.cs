@@ -28,8 +28,8 @@ internal sealed class ItemViewModel : ObservableModel
     private async Task Load(ShortcutService shortcuts)
     {
         bool exists = await Task.Run(() => Model.Exists);
-        Label = exists ? Model.Name : Model.Name + " (missing)";
-        Tooltip = Model.Path + (exists ? "" : "\nOriginal file is missing");
+        Label = exists ? Model.Name : Model.Name + AppLocalization.Current.MissingItemSuffix;
+        Tooltip = Model.Path + (exists ? "" : "\n" + AppLocalization.Current.MissingItemTooltip);
         Icon = await shortcuts.GetIconAsync(Model.Path);
     }
 }

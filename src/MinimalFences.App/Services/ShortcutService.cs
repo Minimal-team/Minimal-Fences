@@ -31,8 +31,14 @@ internal sealed class ShortcutService : IDisposable
     {
         if (_icons.TryGetValue(path, out var cached)) return Task.FromResult(cached);
         var completion = new TaskCompletionSource<ImageSource>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (_requests.IsAddingCompleted) return Task.FromResult(Fallback());
-        _requests.Add((path, completion));
+        try
+        {
+            if (!_requests.TryAdd((path, completion))) return Task.FromResult(Fallback());
+        }
+        catch (InvalidOperationException)
+        {
+            return Task.FromResult(Fallback()); // shutting down
+        }
         return completion.Task;
     }
     private void LoadIcons()
@@ -40,9 +46,15 @@ internal sealed class ShortcutService : IDisposable
         foreach (var (path, completion) in _requests.GetConsumingEnumerable())
         {
             ImageSource image;
+            // Catch everything: an exception escaping this loop would end the thread (leaving every
+            // later icon request pending forever) or terminate the process.
             try { image = Extract(path); }
-            catch (Exception e) when (e is COMException or IOException or ArgumentException or InvalidOperationException)
-            { Log.Write("Icon extraction failed.", e); image = Fallback(); }
+            catch (Exception e)
+            {
+                Log.Write("Icon extraction failed.", e);
+                try { image = Fallback(); }
+                catch (Exception fallbackError) { Log.Write("Fallback icon failed.", fallbackError); completion.TrySetException(fallbackError); continue; }
+            }
             if (_icons.Count > 512) _icons.Clear();
             _icons[path] = image;
             completion.TrySetResult(image);

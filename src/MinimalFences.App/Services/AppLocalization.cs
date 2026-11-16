@@ -175,5 +175,12 @@ internal sealed class AppLocalization : ObservableModel
     public string AllFilesFilter => IsRussian ? "Все файлы|*.*" : "All files|*.*";
     public string DoubleClickUnavailable => IsRussian ? "Обнаружение двойного клика по рабочему столу недоступно. Используйте значок в трее или горячую клавишу." : "Desktop double-click detection is unavailable. Use the tray or keyboard shortcut.";
     public string StartupUpdateError(string error) => IsRussian ? $"Не удалось обновить автозагрузку Windows: {error}" : $"Could not update Windows startup: {error}";
+    public string RestoreToDesktopFailed => IsRussian ? "Не удалось вернуть некоторые элементы на рабочий стол. Они остались в группе; подробности в журнале." : "Some items could not be moved back to the desktop. They were kept in the group; see the log for details.";
+    public string ImageOpenError(string error) => IsRussian ? $"Не удалось открыть изображение: {error}" : $"Could not open the image: {error}";
+    public string MissingItemSuffix => IsRussian ? " (не найден)" : " (missing)";
+    public string MissingItemTooltip => IsRussian ? "Исходный файл не найден" : "Original file is missing";
+    public string HotkeyFormatError => IsRussian ? "Используйте сочетание вида Ctrl+Alt+F или Ctrl+Shift+F12." : "Use a shortcut such as Ctrl+Alt+F or Ctrl+Shift+F12.";
+    public string HotkeyModifierError => IsRussian ? "Выберите клавишу и хотя бы один модификатор (Ctrl, Alt, Shift или Win)." : "Choose a key and at least one modifier (Ctrl, Alt, Shift or Win).";
+    public string HotkeyInUseError => IsRussian ? "Это сочетание уже используется или недоступно." : "This shortcut is already in use or unavailable.";
     public string SettingsSaveError => IsRussian ? "Не удалось сохранить настройки. Проверьте права доступа и свободное место на диске." : "Settings could not be saved. Check access and free space in the settings folder.";
 }

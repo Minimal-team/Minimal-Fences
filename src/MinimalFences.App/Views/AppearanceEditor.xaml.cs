@@ -104,10 +104,18 @@ public partial class AppearanceEditor : UserControl
         };
         if (dialog.ShowDialog(Window.GetWindow(this)) == true)
         {
-            var cropDialog = new ImageCropWindow(dialog.FileName)
+            ImageCropWindow cropDialog;
+            try
             {
-                Owner = Window.GetWindow(this)
-            };
+                // A damaged or unsupported image throws while decoding; unhandled, that would close the app.
+                cropDialog = new ImageCropWindow(dialog.FileName) { Owner = Window.GetWindow(this) };
+            }
+            catch (Exception error) when (error is NotSupportedException or IOException or UnauthorizedAccessException or
+                                          ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+            {
+                MessageBox.Show(AppLocalization.Current.ImageOpenError(error.Message), "Minimal Fences", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
             if (cropDialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(cropDialog.CroppedImagePath))
             {
                 appearance.BadgeImagePath = cropDialog.CroppedImagePath;
