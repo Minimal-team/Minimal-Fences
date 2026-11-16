@@ -10,18 +10,79 @@ namespace MinimalFences.Services;
 
 internal static class ShortcutStorageService
 {
-    internal static readonly string StorageDirectory = Path.Combine(Log.DirectoryPath, "Shortcuts");
+    internal const string StorageFolderName = "Minimal Fences";
 
-    public static bool IsInStorage(string? path)
+    /// <summary>
+    /// Items moved off the desktop live in a hidden folder inside the desktop itself
+    /// (Desktop\Minimal Fences\&lt;group&gt;), so they stay where users look for desktop files in Explorer
+    /// and are covered by desktop backup / OneDrive sync, while not cluttering the desktop.
+    /// </summary>
+    internal static string StorageDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), StorageFolderName);
+
+    /// <summary>Location used by earlier versions; its items are moved to <see cref="StorageDirectory"/> on startup.</summary>
+    internal static readonly string LegacyStorageDirectory = Path.Combine(Log.DirectoryPath, "Shortcuts");
+
+    public static bool IsInStorage(string? path) =>
+        IsUnder(StorageDirectory, path) || IsUnder(LegacyStorageDirectory, path);
+
+    private static bool IsUnder(string directory, string? path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(directory)) return false;
         try
         {
-            string storage = Path.GetFullPath(StorageDirectory).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            string storage = Path.GetFullPath(directory).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
             string full = Path.GetFullPath(path);
             return full.StartsWith(storage, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
+    }
+
+    private static bool IsStorageRootOrAncestor(string path)
+    {
+        try
+        {
+            string full = Path.GetFullPath(path).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            string root = Path.GetFullPath(StorageDirectory).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            return root.StartsWith(full, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>The storage folder of a group, named after the group.</summary>
+    public static string GroupDirectory(Group? group) =>
+        group is null ? StorageDirectory : Path.Combine(StorageDirectory, SafeFolderName(group.Name));
+
+    private static readonly string[] ReservedNames =
+        ["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"];
+
+    internal static string SafeFolderName(string? name)
+    {
+        var builder = new StringBuilder();
+        var invalid = Path.GetInvalidFileNameChars();
+        foreach (char c in name ?? "") builder.Append(Array.IndexOf(invalid, c) >= 0 || char.IsControl(c) ? '_' : c);
+        string result = builder.ToString().Trim().TrimEnd('.', ' ');
+        if (result.Length > 80) result = result[..80].TrimEnd('.', ' ');
+        if (result.Length == 0) result = "Group";
+        if (ReservedNames.Contains(result, StringComparer.OrdinalIgnoreCase)) result += "_";
+        return result;
+    }
+
+    /// <summary>Creates a storage folder; the root is created hidden so it does not show up on the desktop.</summary>
+    internal static string EnsureDirectory(string directory)
+    {
+        string root = StorageDirectory;
+        if (IsUnder(root, directory) || string.Equals(Path.GetFullPath(directory).TrimEnd('\\', '/'), Path.GetFullPath(root).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Directory.Exists(root))
+            {
+                var info = Directory.CreateDirectory(root);
+                try { info.Attributes |= FileAttributes.Hidden; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+                NotifyDesktopChanged();
+            }
+        }
+        Directory.CreateDirectory(directory);
+        return directory;
     }
 
     public static bool IsRecycleBin(string? path)
@@ -163,19 +224,19 @@ internal static class ShortcutStorageService
         return destPath;
     }
 
-    public static string MoveToStorage(string sourcePath)
+    public static string MoveToStorage(string sourcePath, string directory)
     {
         try
         {
             if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath)) return sourcePath;
-            if (IsInStorage(sourcePath)) return sourcePath;
+            if (IsInStorage(sourcePath) || IsStorageRootOrAncestor(sourcePath)) return sourcePath;
 
-            if (IsRecycleBin(sourcePath)) return CreateRecycleBinShortcut();
-            if (IsSystemFolder(sourcePath)) return CreateSystemFolderShortcut(sourcePath);
+            if (IsRecycleBin(sourcePath)) return CreateRecycleBinShortcut(directory);
+            if (IsSystemFolder(sourcePath)) return CreateSystemFolderShortcut(sourcePath, directory);
 
-            Directory.CreateDirectory(StorageDirectory);
+            EnsureDirectory(directory);
             string fileName = Path.GetFileName(sourcePath.TrimEnd('\\', '/'));
-            string destPath = GetUniqueDestinationPath(StorageDirectory, fileName);
+            string destPath = GetUniqueDestinationPath(directory, fileName);
 
             bool moved = false;
             try
@@ -233,11 +294,11 @@ internal static class ShortcutStorageService
         return sourcePath;
     }
 
-    public static string CreateRecycleBinShortcut()
+    public static string CreateRecycleBinShortcut(string directory)
     {
-        Directory.CreateDirectory(StorageDirectory);
+        EnsureDirectory(directory);
         string name = AppLocalization.Current.IsRussian ? "Корзина" : "Recycle Bin";
-        string shortcutPath = Path.Combine(StorageDirectory, name + ".lnk");
+        string shortcutPath = Path.Combine(directory, name + ".lnk");
 
         if (File.Exists(shortcutPath)) return shortcutPath;
 
@@ -272,13 +333,13 @@ internal static class ShortcutStorageService
         }
     }
 
-    public static string CreateVirtualShellShortcut(string parsingName)
+    public static string CreateVirtualShellShortcut(string parsingName, string directory)
     {
-        if (IsRecycleBin(parsingName)) return CreateRecycleBinShortcut();
+        if (IsRecycleBin(parsingName)) return CreateRecycleBinShortcut(directory);
 
-        Directory.CreateDirectory(StorageDirectory);
+        EnsureDirectory(directory);
         string name = GetVirtualItemName(parsingName);
-        string shortcutPath = GetUniqueDestinationPath(StorageDirectory, name + ".lnk");
+        string shortcutPath = GetUniqueDestinationPath(directory, name + ".lnk");
 
         try
         {
@@ -330,44 +391,44 @@ internal static class ShortcutStorageService
         return isRu ? "Системная папка" : "System Folder";
     }
 
-    public static string CreateSystemFolderShortcut(string folderPath)
+    public static string CreateSystemFolderShortcut(string folderPath, string directory)
     {
-        Directory.CreateDirectory(StorageDirectory);
+        EnsureDirectory(directory);
         string name = Path.GetFileName(folderPath.TrimEnd('\\', '/'));
         if (string.IsNullOrWhiteSpace(name))
         {
             name = Path.GetPathRoot(folderPath)?.TrimEnd(':', '\\', '/') ?? "Drive";
         }
-        string shortcutPath = GetUniqueDestinationPath(StorageDirectory, name + ".lnk");
+        string shortcutPath = GetUniqueDestinationPath(directory, name + ".lnk");
         CreateShortcut(folderPath, shortcutPath);
         NotifyCreate(shortcutPath);
         return shortcutPath;
     }
 
-    public static string ImportToStorage(string sourcePath)
+    public static string ImportToStorage(string sourcePath, string directory)
     {
         if (string.IsNullOrWhiteSpace(sourcePath)) return sourcePath;
         if (IsInStorage(sourcePath)) return sourcePath;
 
         if (IsRecycleBin(sourcePath))
         {
-            return CreateRecycleBinShortcut();
+            return CreateRecycleBinShortcut(directory);
         }
 
         if (sourcePath.StartsWith("::{", StringComparison.Ordinal) ||
             sourcePath.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
         {
-            return CreateVirtualShellShortcut(sourcePath);
+            return CreateVirtualShellShortcut(sourcePath, directory);
         }
 
         if (IsSystemFolder(sourcePath))
         {
-            return CreateSystemFolderShortcut(sourcePath);
+            return CreateSystemFolderShortcut(sourcePath, directory);
         }
 
-        if (IsOnDesktop(sourcePath))
+        if (IsOnDesktop(sourcePath) && !IsStorageRootOrAncestor(sourcePath))
         {
-            return MoveToStorage(sourcePath);
+            return MoveToStorage(sourcePath, directory);
         }
 
         string ext = Path.GetExtension(sourcePath);
@@ -376,9 +437,9 @@ internal static class ShortcutStorageService
         {
             try
             {
-                Directory.CreateDirectory(StorageDirectory);
+                EnsureDirectory(directory);
                 string fileName = Path.GetFileName(sourcePath);
-                string destPath = GetUniqueDestinationPath(StorageDirectory, fileName);
+                string destPath = GetUniqueDestinationPath(directory, fileName);
                 File.Copy(sourcePath, destPath, true);
                 NotifyCreate(destPath);
                 return destPath;
@@ -388,14 +449,14 @@ internal static class ShortcutStorageService
 
         try
         {
-            Directory.CreateDirectory(StorageDirectory);
+            EnsureDirectory(directory);
             string trimmedSource = sourcePath.TrimEnd('\\', '/');
             // Folder names such as "Project.v2" have no extension to strip.
             string name = Directory.Exists(sourcePath)
                 ? Path.GetFileName(trimmedSource)
                 : Path.GetFileNameWithoutExtension(trimmedSource);
             if (string.IsNullOrWhiteSpace(name)) name = "Shortcut";
-            string shortcutPath = GetUniqueDestinationPath(StorageDirectory, name + ".lnk");
+            string shortcutPath = GetUniqueDestinationPath(directory, name + ".lnk");
             if (CreateShortcut(sourcePath, shortcutPath))
             {
                 NotifyCreate(shortcutPath);
@@ -410,15 +471,15 @@ internal static class ShortcutStorageService
         return sourcePath;
     }
 
-    public static string? CreateUrlShortcut(string url, string? title = null)
+    public static string? CreateUrlShortcut(string url, string directory, string? title = null)
     {
         try
         {
-            Directory.CreateDirectory(StorageDirectory);
+            EnsureDirectory(directory);
             string safeTitle = title ??
                 (Uri.TryCreate(url, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host) ? uri.Host : "Web Link");
             foreach (char c in Path.GetInvalidFileNameChars()) safeTitle = safeTitle.Replace(c, '_');
-            string shortcutPath = GetUniqueDestinationPath(StorageDirectory, safeTitle + ".url");
+            string shortcutPath = GetUniqueDestinationPath(directory, safeTitle + ".url");
             File.WriteAllText(shortcutPath, $"[InternetShortcut]\r\nURL={url}\r\n");
             NotifyCreate(shortcutPath);
             return shortcutPath;
@@ -429,6 +490,7 @@ internal static class ShortcutStorageService
     public static List<string> ProcessIncomingPaths(IEnumerable<string> paths, Group? group = null)
     {
         var result = new List<string>();
+        string directory = GroupDirectory(group);
         var known = group is null
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(group.Items.SelectMany(i => new[] { i.Path, Identity(i.Path) }), StringComparer.OrdinalIgnoreCase);
@@ -442,11 +504,11 @@ internal static class ShortcutStorageService
             if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
                 trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             {
-                var url = CreateUrlShortcut(trimmed);
+                var url = CreateUrlShortcut(trimmed, directory);
                 if (url is not null) result.Add(url);
                 continue;
             }
-            string processed = ImportToStorage(trimmed);
+            string processed = ImportToStorage(trimmed, directory);
             result.Add(processed);
         }
         return result;
@@ -825,6 +887,86 @@ internal static class ShortcutStorageService
         }
     }
 
+    /// <summary>
+    /// Keeps every stored item in the folder of the group it belongs to: moves items after a group was renamed,
+    /// after an item was moved to another group, and migrates items from the AppData folder used by earlier
+    /// versions. Removes storage folders that became empty. Returns the number of items moved.
+    /// </summary>
+    public static int RelocateStorage(IEnumerable<Group> groups)
+    {
+        int moved = 0;
+        var groupList = groups.ToList();
+        foreach (var group in groupList)
+        {
+            string directory = GroupDirectory(group);
+            foreach (var item in group.Items.ToArray())
+            {
+                string path = item.Path;
+                if (!IsInStorage(path)) continue;
+                if (!File.Exists(path) && !Directory.Exists(path))
+                {
+                    // Settings may still hold an older location (e.g. saving failed after a move): look for it by name.
+                    string candidate = Path.Combine(directory, Path.GetFileName(path.TrimEnd('\\', '/')));
+                    if ((File.Exists(candidate) || Directory.Exists(candidate)) &&
+                        !groupList.Any(g => g.Items.Any(i => string.Equals(i.Path, candidate, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        item.Path = candidate;
+                        moved++;
+                    }
+                    continue;
+                }
+                try
+                {
+                    string full = Path.GetFullPath(path).TrimEnd('\\', '/');
+                    if (string.Equals(Path.GetDirectoryName(full), Path.GetFullPath(directory).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    EnsureDirectory(directory);
+                    string destination = GetUniqueDestinationPath(directory, Path.GetFileName(full));
+                    if (Directory.Exists(full)) Directory.Move(full, destination);
+                    else File.Move(full, destination);
+                    NotifyMove(full, destination);
+                    item.Path = destination;
+                    moved++;
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                {
+                    // E.g. a folder cannot be moved to another drive: it simply stays where it is and keeps working.
+                    Log.Write($"Could not move a stored item to its group folder: {path}", e);
+                }
+            }
+        }
+        CleanupEmptyStorageFolders(groupList);
+        return moved;
+    }
+
+    private static void CleanupEmptyStorageFolders(IReadOnlyCollection<Group> groups)
+    {
+        var used = new HashSet<string>(groups.Select(g => SafeFolderName(g.Name)), StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            string root = StorageDirectory;
+            if (Directory.Exists(root))
+            {
+                foreach (var dir in Directory.GetDirectories(root))
+                {
+                    if (!used.Contains(Path.GetFileName(dir)) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                        Directory.Delete(dir);
+                }
+                if (!Directory.EnumerateFileSystemEntries(root).Any())
+                {
+                    Directory.Delete(root);
+                    NotifyDesktopChanged();
+                }
+            }
+            if (Directory.Exists(LegacyStorageDirectory) && !Directory.EnumerateFileSystemEntries(LegacyStorageDirectory).Any())
+                Directory.Delete(LegacyStorageDirectory);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Write("Could not remove an empty storage folder.", e);
+        }
+    }
+
     public static int MigrateDesktopShortcuts(IEnumerable<Group> groups)
     {
         int count = 0;
@@ -838,7 +980,7 @@ internal static class ShortcutStorageService
                 if (IsOnDesktop(item.Path) && (File.Exists(item.Path) || Directory.Exists(item.Path)))
                 {
                     string oldPath = item.Path;
-                    string newPath = MoveToStorage(oldPath);
+                    string newPath = MoveToStorage(oldPath, GroupDirectory(group));
                     if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
                     {
                         item.Path = newPath;

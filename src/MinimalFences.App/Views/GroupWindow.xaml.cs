@@ -1688,6 +1688,18 @@ public partial class GroupWindow : Window
         AddMenu(menu, AppLocalization.Current.MenuCustomize, () => _app.ShowSettings(Model));
         AddMenu(menu, AppLocalization.Current.MenuAddFiles, () => _app.AddFiles(Model));
         AddMenu(menu, AppLocalization.Current.MenuAddFolder, () => _app.AddFolder(Model));
+        AddMenu(menu, AppLocalization.Current.MenuOpenGroupFolder, () =>
+        {
+            try
+            {
+                string directory = ShortcutStorageService.EnsureDirectory(ShortcutStorageService.GroupDirectory(Model));
+                _app.ShowError(ShortcutService.OpenFolder(directory));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                _app.ShowError(error.Message);
+            }
+        });
         menu.Items.Add(new Separator());
         AddMenu(menu, AppLocalization.Current.MenuCreateGroup, () => _app.CreateGroup());
         AddMenu(menu, AppLocalization.Current.MenuHideAll, _app.ToggleVisibility);

@@ -43,7 +43,11 @@ internal sealed class AppController : IDisposable
         Shortcuts = new();
         Desktop = new();
         _saveTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(650) };
-        _saveTimer.Tick += (_, _) => SaveNow();
+        _saveTimer.Tick += (_, _) =>
+        {
+            if (!validation) ShortcutStorageService.RelocateStorage(Settings.Groups);
+            SaveNow();
+        };
         _recoveryTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
         _recoveryTimer.Tick += (_, _) => RetryDesktop();
         _clicks = new(Application.Current.Dispatcher, ToggleVisibility);
@@ -77,6 +81,7 @@ internal sealed class AppController : IDisposable
         if (!validation)
         {
             if (ShortcutStorageService.MigrateDesktopShortcuts(Settings.Groups) > 0) SaveSoon();
+            if (_canSave && ShortcutStorageService.RelocateStorage(Settings.Groups) > 0) SaveSoon();
             ApplyInputSettings();
             ShortcutStorageService.SyncDesktopRecycleBinVisibility(Settings.Groups, Desktop);
         }

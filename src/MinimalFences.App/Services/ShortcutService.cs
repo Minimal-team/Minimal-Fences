@@ -153,6 +153,17 @@ internal sealed class ShortcutService : IDisposable
         catch (Win32Exception e) { Log.Write("Could not open file location.", e); return e.Message; }
     }
 
+    public static string? OpenFolder(string directory)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{directory}\"") { UseShellExecute = true });
+            return null;
+        }
+        catch (Exception e) when (e is Win32Exception or InvalidOperationException or IOException)
+        { Log.Write("Could not open a folder.", e); return e.Message; }
+    }
+
     private static ImageSource? ExtractUrlIcon(string urlPath)
     {
         try

@@ -182,5 +182,6 @@ internal sealed class AppLocalization : ObservableModel
     public string HotkeyFormatError => IsRussian ? "Используйте сочетание вида Ctrl+Alt+F или Ctrl+Shift+F12." : "Use a shortcut such as Ctrl+Alt+F or Ctrl+Shift+F12.";
     public string HotkeyModifierError => IsRussian ? "Выберите клавишу и хотя бы один модификатор (Ctrl, Alt, Shift или Win)." : "Choose a key and at least one modifier (Ctrl, Alt, Shift or Win).";
     public string HotkeyInUseError => IsRussian ? "Это сочетание уже используется или недоступно." : "This shortcut is already in use or unavailable.";
+    public string MenuOpenGroupFolder => IsRussian ? "Открыть папку группы" : "Open group folder";
     public string SettingsSaveError => IsRussian ? "Не удалось сохранить настройки. Проверьте права доступа и свободное место на диске." : "Settings could not be saved. Check access and free space in the settings folder.";
 }
