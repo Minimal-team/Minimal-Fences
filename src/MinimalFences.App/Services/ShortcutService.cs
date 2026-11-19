@@ -18,6 +18,7 @@ namespace MinimalFences.Services;
 
 internal sealed class ShortcutService : IDisposable
 {
+    private const int ErrorCancelled = 1223;
     private readonly ConcurrentDictionary<string, ImageSource> _icons = new(StringComparer.OrdinalIgnoreCase);
     private readonly BlockingCollection<(string Path, TaskCompletionSource<ImageSource> Completion)> _requests = new();
     private readonly Thread _thread;
@@ -110,12 +111,24 @@ internal sealed class ShortcutService : IDisposable
         source.Freeze();
         return source;
     }
-    public static string? Open(ShortcutItem item)
+    public static string? Open(ShortcutItem item, IntPtr owner)
     {
         if (!item.Exists) return AppLocalization.Current.ItemMissing;
         try
         {
-            Process.Start(new ProcessStartInfo(item.Path) { UseShellExecute = true });
+            using var process = Process.Start(new ProcessStartInfo(item.Path)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(item.Path) ?? "",
+                // Let Explorer resolve broken or moved links and show its confirmation UI.
+                ErrorDialog = item.Path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase),
+                ErrorDialogParentHandle = owner
+            });
+            return null;
+        }
+        catch (Win32Exception e) when (e.NativeErrorCode == ErrorCancelled)
+        {
+            Log.Write("Windows cancelled opening an item.", e);
             return null;
         }
         catch (Exception e) when (e is Win32Exception or InvalidOperationException or IOException)

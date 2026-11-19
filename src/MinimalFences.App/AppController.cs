@@ -80,6 +80,7 @@ internal sealed class AppController : IDisposable
         LayoutGeometry.RecoverOffscreen(Settings.Groups, DesktopIntegrationService.Screens());
         if (!validation)
         {
+            ShortcutStorageService.ProtectExistingStorageDirectory();
             if (ShortcutStorageService.MigrateDesktopShortcuts(Settings.Groups) > 0) SaveSoon();
             if (_canSave && ShortcutStorageService.RelocateStorage(Settings.Groups) > 0) SaveSoon();
             ApplyInputSettings();

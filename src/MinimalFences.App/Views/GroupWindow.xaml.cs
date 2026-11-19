@@ -1144,14 +1144,13 @@ public partial class GroupWindow : Window
     private void ItemUp(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left) return;
-        if (_dragItem is { } item && !_dragInitiated)
-        {
-            _app.ShowError(ShortcutService.Open(item.Model));
-        }
+        var item = _dragInitiated ? null : _dragItem;
         _dragItem = null;
         _itemDragStart = null;
         _dragInitiated = false;
         e.Handled = true;
+        if (item is not null)
+            _app.ShowError(ShortcutService.Open(item.Model, _handle));
     }
 
     private void ItemMove(object sender, MouseEventArgs e)
@@ -1465,7 +1464,7 @@ public partial class GroupWindow : Window
         {
             foreach (var si in selectedItems)
             {
-                _app.ShowError(ShortcutService.Open(si.Model));
+                _app.ShowError(ShortcutService.Open(si.Model, _handle));
             }
         });
 
@@ -1596,7 +1595,7 @@ public partial class GroupWindow : Window
             {
                 foreach (var si in selected)
                 {
-                    _app.ShowError(ShortcutService.Open(si.Model));
+                    _app.ShowError(ShortcutService.Open(si.Model, _handle));
                 }
                 e.Handled = true;
                 return;
@@ -1638,7 +1637,7 @@ public partial class GroupWindow : Window
             }
             foreach (var si in selected)
             {
-                _app.ShowError(ShortcutService.Open(si.Model));
+                _app.ShowError(ShortcutService.Open(si.Model, _handle));
             }
             e.Handled = true;
         }

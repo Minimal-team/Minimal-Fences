@@ -11,6 +11,8 @@ namespace MinimalFences.Services;
 internal static class ShortcutStorageService
 {
     internal const string StorageFolderName = "Minimal Fences";
+    private const string RecycleBinShellPath = "shell:RecycleBinFolder";
+    private const string RecycleBinParsingName = "::{645FF040-5081-101B-9F08-00AA002F954E}";
 
     /// <summary>
     /// Items moved off the desktop live in a hidden folder inside the desktop itself
@@ -68,44 +70,69 @@ internal static class ShortcutStorageService
         return result;
     }
 
-    /// <summary>Creates a storage folder; the root is created hidden so it does not show up on the desktop.</summary>
+    /// <summary>Creates a storage folder and protects the desktop root from normal hidden-item views.</summary>
     internal static string EnsureDirectory(string directory)
     {
         string root = StorageDirectory;
         if (IsUnder(root, directory) || string.Equals(Path.GetFullPath(directory).TrimEnd('\\', '/'), Path.GetFullPath(root).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase))
         {
-            if (!Directory.Exists(root))
-            {
-                var info = Directory.CreateDirectory(root);
-                try { info.Attributes |= FileAttributes.Hidden; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-                NotifyDesktopChanged();
-            }
+            if (!Directory.Exists(root) && ProtectStorageDirectory(Directory.CreateDirectory(root))) NotifyDesktopChanged();
         }
         Directory.CreateDirectory(directory);
         return directory;
+    }
+
+    internal static bool ProtectStorageDirectory(DirectoryInfo directory)
+    {
+        // Explorer's normal Hidden items toggle still excludes entries with both of these attributes.
+        const FileAttributes required = FileAttributes.Hidden | FileAttributes.System;
+        try
+        {
+            var attributes = directory.Attributes;
+            if ((attributes & required) == required) return false;
+            directory.Attributes = attributes | required;
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Log.Write($"Could not hide the desktop storage folder: {directory.FullName}", e);
+            return false;
+        }
+    }
+
+    internal static void ProtectExistingStorageDirectory()
+    {
+        var directory = new DirectoryInfo(StorageDirectory);
+        // Earlier versions used Hidden for the app's root. Leave ordinary same-name folders alone.
+        if (directory.Exists && (directory.Attributes & FileAttributes.Hidden) != 0 && ProtectStorageDirectory(directory))
+            NotifyDesktopChanged();
     }
 
     public static bool IsRecycleBin(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
         string p = path.Trim();
-        if (p.IndexOf("645FF040-5081-101B-9F08-00AA002F954E", StringComparison.OrdinalIgnoreCase) >= 0) return true;
-        if (string.Equals(p, "shell:RecycleBinFolder", StringComparison.OrdinalIgnoreCase)) return true;
-        if (p.EndsWith("$Recycle.Bin", StringComparison.OrdinalIgnoreCase) || p.Contains("$Recycle.Bin\\", StringComparison.OrdinalIgnoreCase)) return true;
-
-        string name = Path.GetFileNameWithoutExtension(p);
-        if (IsInStorage(p) && (string.Equals(name, "Корзина", StringComparison.OrdinalIgnoreCase) || string.Equals(name, "Recycle Bin", StringComparison.OrdinalIgnoreCase)))
-            return true;
-
-        if (p.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) && File.Exists(p))
-        {
-            string? target = ResolveTarget(p);
-            if (!string.IsNullOrWhiteSpace(target) && !string.Equals(target, p, StringComparison.OrdinalIgnoreCase) && IsRecycleBin(target))
-                return true;
-        }
-
-        return false;
+        return IsRecycleBinTarget(p) ||
+            (p.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase) && IsRecycleBinTarget(ResolveTarget(p)));
     }
+
+    private static bool IsRecycleBinTarget(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (IsRecycleBinShellName(path)) return true;
+        if (!path.Contains("$Recycle.Bin", StringComparison.OrdinalIgnoreCase) || !Path.IsPathFullyQualified(path))
+            return false;
+
+        string directory = Path.Combine(Path.GetPathRoot(path)!, "$Recycle.Bin");
+        return string.Equals(path.TrimEnd('\\', '/'), directory, StringComparison.OrdinalIgnoreCase) || IsUnder(directory, path);
+    }
+
+    private static bool IsRecycleBinShellName(string path) =>
+        string.Equals(path, RecycleBinShellPath, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(path, RecycleBinParsingName, StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(path, "shell:" + RecycleBinParsingName, StringComparison.OrdinalIgnoreCase);
+
+    private static string ExplorerPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
 
     public static bool IsSystemFolder(string? path)
     {
@@ -300,14 +327,14 @@ internal static class ShortcutStorageService
         string name = AppLocalization.Current.IsRussian ? "Корзина" : "Recycle Bin";
         string shortcutPath = Path.Combine(directory, name + ".lnk");
 
-        if (File.Exists(shortcutPath)) return shortcutPath;
+        if (File.Exists(shortcutPath) && IsRecycleBin(shortcutPath)) return shortcutPath;
+        shortcutPath = GetUniqueDestinationPath(directory, name + ".lnk");
 
         try
         {
             var link = (IShellLinkW)new ShellLink();
-            string explorer = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
-            link.SetPath(explorer);
-            link.SetArguments("shell:RecycleBinFolder");
+            link.SetPath(ExplorerPath);
+            link.SetArguments(RecycleBinShellPath);
             link.SetWorkingDirectory(Environment.GetFolderPath(Environment.SpecialFolder.Windows));
             link.SetDescription(name);
 
@@ -538,7 +565,8 @@ internal static class ShortcutStorageService
                 link.GetArguments(argsBuffer, argsBuffer.Capacity);
                 string target = pathBuffer.ToString().Trim();
                 string args = argsBuffer.ToString().Trim();
-                if (args.StartsWith("::{", StringComparison.Ordinal) || args.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+                if ((args.StartsWith("::{", StringComparison.Ordinal) || args.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)) &&
+                    (!IsRecycleBinShellName(args) || string.Equals(target, ExplorerPath, StringComparison.OrdinalIgnoreCase)))
                     return "shell|" + args;
                 if (!string.IsNullOrEmpty(target))
                     return Path.GetFullPath(target).TrimEnd('\\', '/') + (args.Length > 0 ? "|" + args : "");
@@ -577,15 +605,19 @@ internal static class ShortcutStorageService
                 link.GetPath(pathBuffer, pathBuffer.Capacity, IntPtr.Zero, 0);
                 string target = pathBuffer.ToString().Trim();
 
+                var argsBuffer = new StringBuilder(1024);
+                link.GetArguments(argsBuffer, argsBuffer.Capacity);
+                string args = argsBuffer.ToString().Trim();
+                // The app's Recycle Bin shortcut uses Explorer as its executable and the shell folder as its argument.
+                if (IsRecycleBinShellName(args) && string.Equals(target, ExplorerPath, StringComparison.OrdinalIgnoreCase))
+                    return args;
+
                 if (!string.IsNullOrWhiteSpace(target) && (File.Exists(target) || Directory.Exists(target)))
                 {
                     return target;
                 }
 
-                var argsBuffer = new StringBuilder(1024);
-                link.GetArguments(argsBuffer, argsBuffer.Capacity);
-                string args = argsBuffer.ToString().Trim();
-                if (!string.IsNullOrWhiteSpace(args))
+                if (!string.IsNullOrWhiteSpace(args) && !IsRecycleBinShellName(args))
                 {
                     if (args.StartsWith("shell:", StringComparison.OrdinalIgnoreCase) ||
                         args.StartsWith("::{", StringComparison.Ordinal))
@@ -783,7 +815,7 @@ internal static class ShortcutStorageService
             {
                 foreach (var file in Directory.GetFiles(dir, "*.lnk"))
                 {
-                    if (string.Equals(Identity(file), "shell|shell:RecycleBinFolder", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(Identity(file), "shell|" + RecycleBinShellPath, StringComparison.OrdinalIgnoreCase))
                     {
                         try { File.Delete(file); } catch { }
                     }
@@ -945,7 +977,8 @@ internal static class ShortcutStorageService
         try
         {
             string root = StorageDirectory;
-            if (Directory.Exists(root))
+            var rootInfo = new DirectoryInfo(root);
+            if (rootInfo.Exists && (rootInfo.Attributes & FileAttributes.Hidden) != 0)
             {
                 foreach (var dir in Directory.GetDirectories(root))
                 {

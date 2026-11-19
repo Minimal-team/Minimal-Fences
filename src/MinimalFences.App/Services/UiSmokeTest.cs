@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Interop;
 using MinimalFences.Core;
+using MinimalFences.Interop;
 using MinimalFences.Views;
 
 namespace MinimalFences.Services;
@@ -79,6 +82,9 @@ internal static class UiSmokeTest
             if (!File.Exists(testShortcut)) throw new InvalidOperationException("Shortcut file was not created.");
             checks.Add("IShellLink COM shortcut creation succeeds");
 
+            await VerifyStoredShortcutLaunch(directory, new WindowInteropHelper(groupWindow).Handle);
+            checks.Add("Windows Shell launches a moved shortcut with its original arguments and working directory");
+
             string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             string fakeDesktopFile = Path.Combine(userDesktop, "minimal_fences_test.lnk");
             if (!ShortcutStorageService.IsOnDesktop(fakeDesktopFile))
@@ -86,6 +92,15 @@ internal static class UiSmokeTest
             if (ShortcutStorageService.IsOnDesktop(testTarget))
                 throw new InvalidOperationException("IsOnDesktop returned true for non-desktop path.");
             checks.Add("Desktop path detection correctly distinguishes desktop and external files");
+
+            var storageFolder = Directory.CreateDirectory(Path.Combine(directory, "storage"));
+            storageFolder.Attributes |= FileAttributes.Hidden | FileAttributes.Archive;
+            const FileAttributes protectedAttributes = FileAttributes.Hidden | FileAttributes.System | FileAttributes.Archive;
+            if (!ShortcutStorageService.ProtectStorageDirectory(storageFolder) ||
+                (File.GetAttributes(storageFolder.FullName) & protectedAttributes) != protectedAttributes ||
+                ShortcutStorageService.ProtectStorageDirectory(storageFolder))
+                throw new InvalidOperationException("The hidden storage folder was not upgraded to protected attributes.");
+            checks.Add("Previously hidden storage gets System while retaining its other attributes");
 
             string resolved = ShortcutStorageService.ResolveTarget(testShortcut) ?? "";
             if (!string.Equals(Path.GetFullPath(resolved), Path.GetFullPath(testTarget), StringComparison.OrdinalIgnoreCase))
@@ -95,6 +110,12 @@ internal static class UiSmokeTest
             if (!ShortcutStorageService.IsRecycleBin("::{645FF040-5081-101B-9F08-00AA002F954E}") ||
                 !ShortcutStorageService.IsRecycleBin("shell:RecycleBinFolder"))
                 throw new InvalidOperationException("Recycle Bin detection failed.");
+            string ordinaryFile = Path.Combine(ShortcutStorageService.StorageDirectory, "Recycle Bin.txt");
+            if (ShortcutStorageService.IsRecycleBin(ordinaryFile))
+                throw new InvalidOperationException("An ordinary stored file was mistaken for the Recycle Bin.");
+            string recycleBinLink = ShortcutStorageService.CreateRecycleBinShortcut(directory);
+            if (!File.Exists(recycleBinLink) || !ShortcutStorageService.IsRecycleBin(recycleBinLink))
+                throw new InvalidOperationException("The Explorer shortcut to the Recycle Bin was not recognized.");
             string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
             if (!ShortcutStorageService.IsSystemFolder(winDir) ||
                 !ShortcutStorageService.IsSystemFolder("::{20D04FE0-3AEA-1069-A2D8-08002B30309D}"))
@@ -125,6 +146,41 @@ internal static class UiSmokeTest
         }
         return error is null ? 0 : 1;
     }
+
+    private static async Task VerifyStoredShortcutLaunch(string directory, IntPtr owner)
+    {
+        string workingDirectory = Directory.CreateDirectory(Path.Combine(directory, "Shortcut working directory")).FullName;
+        string storedDirectory = Directory.CreateDirectory(Path.Combine(directory, "Stored shortcuts")).FullName;
+        string originalShortcut = Path.Combine(directory, "launch.lnk");
+        var link = (IShellLinkW)new ShellLink();
+        try
+        {
+            link.SetPath(Path.Combine(Environment.SystemDirectory, "cmd.exe"));
+            link.SetArguments("/d /c echo launch-argument> launched.tmp && ren launched.tmp launched.txt");
+            link.SetWorkingDirectory(workingDirectory);
+            ((IPersistFile)link).Save(originalShortcut, true);
+        }
+        finally { Marshal.ReleaseComObject(link); }
+
+        string storedShortcut = Path.Combine(storedDirectory, Path.GetFileName(originalShortcut));
+        File.Move(originalShortcut, storedShortcut);
+        string? error = ShortcutService.Open(new ShortcutItem { Path = storedShortcut }, owner);
+        if (error is not null) throw new InvalidOperationException(error);
+
+        string marker = Path.Combine(workingDirectory, "launched.txt");
+        for (int attempt = 0; attempt < 200; attempt++)
+        {
+            if (File.Exists(marker))
+            {
+                string result = await File.ReadAllTextAsync(marker);
+                if (result.Trim() == "launch-argument") return;
+                break;
+            }
+            await Task.Delay(50);
+        }
+        throw new InvalidOperationException("The moved shortcut did not run with the saved arguments and working directory.");
+    }
+
     private sealed class BindingErrorListener : TraceListener
     {
         internal List<string> Errors { get; } = [];

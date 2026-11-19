@@ -9,7 +9,7 @@
     <RootNamespace>MinimalFences</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/MinimalFences.ico</ApplicationIcon>
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Product>Minimal Fences</Product>
     <Description>A lightweight, local Windows desktop organizer.</Description>
     <PublishTrimmed>false</PublishTrimmed>

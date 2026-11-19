@@ -26,7 +26,7 @@
 
 Без рекламы, телеметрии и учётных записей. Все настройки хранятся локально, права администратора не требуются.
 
-> Файлы и папки, перетащенные в группу **с рабочего стола**, переносятся в скрытую папку `Рабочий стол\Minimal Fences\<название группы>` — они остаются в папке рабочего стола (видны в Проводнике при включённом показе скрытых элементов и попадают в резервную копию / OneDrive), но не загромождают сам рабочий стол. Открыть папку группы можно из её меню. Для элементов из других мест создаётся ярлык, а оригинал остаётся на месте. Удаление элемента или группы возвращает перенесённые файлы на рабочий стол, ярлыки отправляются в корзину — исходные файлы никогда не удаляются.
+> Файлы и папки, перетащенные в группу **с рабочего стола**, переносятся в скрытую папку `Рабочий стол\Minimal Fences\<название группы>` — внутри папки рабочего стола. Служебная папка скрыта даже при показе скрытых элементов, пока включена настройка Windows «Скрывать защищённые системные файлы». Открыть папку группы можно из её меню. Для элементов из других мест создаётся ярлык, а оригинал остаётся на месте. Удаление элемента или группы возвращает перенесённые файлы на рабочий стол, ярлыки отправляются в корзину — исходные файлы никогда не удаляются.
 
 ### Возможности
 
@@ -58,7 +58,7 @@ dotnet publish src/MinimalFences.App -c Release -r win-x64 --self-contained true
 
 No ads, telemetry, or accounts required. Settings are stored locally; administrator privileges are not needed.
 
-> Files and folders dragged into a group **from the desktop** are moved into a hidden folder, `Desktop\Minimal Fences\<group name>`. They stay inside your Desktop folder (visible in Explorer when hidden items are shown, included in desktop backup / OneDrive), without cluttering the desktop itself. Use "Open group folder" in a group's menu to see them. Items from anywhere else get a shortcut and the original stays where it is. Removing an item or a group moves such files back onto the desktop and sends shortcuts to the Recycle Bin; original files are never deleted.
+> Files and folders dragged into a group **from the desktop** are moved into a hidden folder, `Desktop\Minimal Fences\<group name>`. The storage folder stays hidden when Hidden items is on and Windows is set to hide protected operating system files. Use "Open group folder" in a group's menu to see them. Items from anywhere else get a shortcut and the original stays where it is. Removing an item or a group moves such files back onto the desktop and sends shortcuts to the Recycle Bin; original files are never deleted.
 
 ### Features
 
